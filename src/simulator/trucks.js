@@ -89,28 +89,6 @@ export function buildTruck({
     halfDepth * 2,
     body,
   );
-  // Small SENAI marks on both faces of the closed side wall.
-  const logoTexture = new THREE.TextureLoader().load(
-    `${import.meta.env?.BASE_URL ?? "./"}senai-logo.png`,
-  );
-  logoTexture.colorSpace = THREE.SRGBColorSpace;
-  const logoMaterial = new THREE.MeshBasicMaterial({
-    map: logoTexture,
-    transparent: true,
-    depthWrite: false,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-  });
-  for (const face of [-1, 1]) {
-    const logo = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.7, 0.74),
-      logoMaterial,
-    );
-    logo.position.set(0, 3.05, -halfDepth + face * 0.041);
-    logo.rotation.y = face < 0 ? Math.PI : 0;
-    logo.name = "senai-truck-logo";
-    truck.add(logo);
-  }
   const doors = [];
   for (const z of [-halfDepth, halfDepth]) {
     if (z < 0)
@@ -425,14 +403,6 @@ export function buildTruck({
     lift,
     doors,
     wheels,
-    materials: [
-      body,
-      paint,
-      rubber,
-      windowMat,
-      logoMaterial,
-      ...lamps.values(),
-    ],
-    textures: [logoTexture],
+    materials: [body, paint, rubber, windowMat, ...lamps.values()],
   };
 }

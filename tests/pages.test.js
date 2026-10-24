@@ -81,6 +81,16 @@ test("compiled Pages demo uses hashed subdirectory assets and excludes backend a
       "Login form must not be loaded into the demo",
     );
     assert.ok(javascript.includes("Recebimento"), "Simulator must be included");
+    assert.equal(
+      javascript.includes("senai-truck-logo"),
+      false,
+      "Published demo must not contain SENAI truck decals",
+    );
+    assert.ok(
+      javascript.includes("senai-signature") &&
+        javascript.includes("senai-logo.png"),
+      "The header SENAI logo must remain",
+    );
     for (const privateMarker of [
       "AUTH_JWT_SECRET",
       "SMTP_PASSWORD",
