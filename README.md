@@ -28,7 +28,7 @@ Em produção, é necessário um serviço Node persistente, HTTPS e proxy de `/a
 
 ## Conduzir a simulação
 
-O modo Automático é o padrão. Ao entrar na conta, o simulador abre no Recebimento; clique em Iniciar para começar o ciclo. O modo Interativo continua disponível: nele, use o botão da cena ou do painel para autorizar uma operação por vez. A máquina termina essa operação e espera o próximo comando. Na linha integrada em modo Interativo, passe pelos setores para liberar as operações quando receberem material. A montagem de cabo/alças faz parte da produção. Sensores, proteção, obstrução e emergência afetam o ciclo. Não há conexão com CLP externo nesta versão.
+O modo Automático é o padrão. Após escolher Panelas, o simulador abre no Recebimento; clique em Iniciar para começar o ciclo. O modo Interativo continua disponível: nele, use o botão da cena ou do painel para autorizar uma operação por vez. A máquina termina essa operação e espera o próximo comando. Na linha integrada em modo Interativo, passe pelos setores para liberar as operações quando receberem material. A montagem de cabo/alças faz parte da produção. Sensores, proteção, obstrução e emergência afetam o ciclo. Não há conexão com CLP externo nesta versão.
 
 ## Verificar
 
@@ -47,3 +47,22 @@ A altura das peças usa a superfície de apoio e o fundo real da geometria. Na p
 Estoque usa garfos: elevar, guardar no endereço, recuar, recolher e descer. A caixa passa a repousar nos apoios da prateleira enquanto os garfos recuam. O estoque final exibe somente caixas. A expedição preenche os endereços mais profundos primeiro, com plataforma de doca e três níveis de apoio no caminhão.
 
 Colisores da estrutura verificam o volume varrido pela peça entre quadros e bloqueiam o movimento se a passagem não estiver livre. Ferramentas seguem percursos de contato e recolhimento definidos para os modelos. Os testes verificam apoio, continuidade dos trajetos, folga de caixas/cabos, ferramentas e carregamento sem sobreposição. A câmera inicial fica centralizada e elevada na frente da bancada; as docas usam a mesma orientação com enquadramento ampliado.
+
+## Escolha de ambientes
+
+Depois do login (ou diretamente na demonstração Pages), a página inicial apresenta quatro linhas: panelas, bebidas, encomendas e móveis. Cada cartão abre uma simulação própria; **Escolher ambiente** volta à seleção, encerrando a animação e liberando a cena 3D anterior. A autenticação da execução normal continua obrigatória.
+
+Nas três novas linhas, **Interativo** espera autorização a cada operação e **Automático** encadeia as etapas. Ajuste os parâmetros do produto antes de liberar a máquina. Pausar preserva a posição; a emergência exige rearmar e iniciar novamente. As três linhas reutilizam a interface, o piso, a esteira, a iluminação e as câmeras originais das panelas. Selecione uma etapa para treinar na **Bancada individual**, ou escolha **Linha integrada** para conduzir o fluxo completo. O modo **Manual** permite comandar transporte, processo e transferência.
+
+- **Bebidas:** recebimento, lavagem, envase, tampagem, rotulagem/conferência, embalagem e expedição. Volume incorreto e tampa ausente bloqueiam a liberação; após corrigir o abastecimento, **Repetir tampagem** recupera a mesma garrafa.
+- **Encomendas:** descarga, leitura de etiqueta, pesagem, separação, armazenagem endereçada e carregamento. Destino, endereço, calibração, corredor, rota e quantidade são conferidos antes da liberação.
+- **Móveis:** recebimento da madeira, corte, quatro furos de 12 mm, montagem dos montantes, inspeção e embalagem. Comprimento, profundidade e proteção da serra precisam estar corretos. As medidas são referências didáticas da simulação.
+
+
+## Missões e retomada
+
+Cada ambiente oferece uma missão de 12 unidades. O objetivo só é concluído após as operações e a entrega real das unidades na linha integrada. **Iniciar com falha** prepara um desafio de diagnóstico; o aluno compara os sinais, identifica a causa, corrige o parâmetro ou a condição e retoma a mesma peça. O progresso e o resultado explicam o fluxo executado.
+
+**Visão geral** mostra máquinas, filas, peças em processo e saídas. Clique numa máquina ou na sua identificação para abrir a bancada e os controles. As câmeras individuais originais continuam disponíveis.
+
+Na execução com servidor, a atividade é gravada por conta autenticada e por ambiente. Ao voltar, filas, peças, etapa, condições de segurança, missão e resultados são retomados com a simulação pausada. Conflitos entre abas não sobrescrevem a atividade mais recente. A demonstração no GitHub Pages salva somente neste navegador, separada dos registros das contas. Não há painel de professor nem relatório visual/PDF.
