@@ -1,3 +1,4 @@
+import { createCookwareReflection } from "./cookware-finish.js";
 import { buildIndustryStation } from "./industries/station-adapter.js";
 import { buildLabModel, updateLabModel } from "./lab-model.js";
 import {
@@ -44,6 +45,9 @@ export function createLabScene(
   const room = new RoomEnvironment(),
     pmrem = new THREE.PMREMGenerator(renderer),
     env = pmrem.fromScene(room, 0.04);
+  const cookwareReflection = industry
+    ? null
+    : createCookwareReflection(THREE, pmrem);
   scene.environment = env.texture;
   scene.environmentIntensity = 0.75;
   room.dispose();
@@ -72,6 +76,7 @@ export function createLabScene(
   const mat = (color, metalness = 0, roughness = 0.6) =>
     new THREE.MeshStandardMaterial({ color, metalness, roughness });
   const m = {
+    cookwareReflection: cookwareReflection?.texture,
     blue: mat("#164193", 0.4, 0.35),
     white: mat("#cbd5df", 0.25, 0.44),
     steel: mat("#aebdc9", 0.84, 0.25),
@@ -396,6 +401,7 @@ export function createLabScene(
       }
       controls.dispose();
       renderer.dispose();
+      cookwareReflection?.dispose();
       env.texture.dispose();
     },
     get camera() {

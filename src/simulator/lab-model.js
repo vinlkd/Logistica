@@ -1,3 +1,4 @@
+import { applyCookwareFinish } from "./cookware-finish.js";
 import {
   buildHandleAssembler,
   updateHandleAssembler,
@@ -118,6 +119,8 @@ export function buildLabModel({
     geo.morphAttributes.normal = [target.attributes.normal];
     const metal = m.steel.clone();
     metal.side = THREE.DoubleSide;
+    if (m.cookwareReflection) metal.envMap = m.cookwareReflection;
+    applyCookwareFinish(metal, 0);
     const body = new THREE.Mesh(geo, metal);
     body.castShadow = true;
     body.receiveShadow = true;
@@ -706,7 +709,7 @@ export function updateLabModel(
     pot.handles.visible = p.form > 0.99 && cell.id !== "production";
     pot.handles.scale.setScalar(1);
   }
-  pot.metal.roughness = 0.64 - p.polish * 0.45;
+  applyCookwareFinish(pot.metal, p.polish);
   if (model.platform) model.platform.position.y = p.support - 0.04;
   if (model.piston) {
     model.piston.position.y = (0.22 + p.support - 0.08) / 2;
