@@ -57,7 +57,7 @@
 }
 .hub-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 }
 .hub-card {
@@ -582,4 +582,40 @@ body.industry-page .hub {
 }
 .industry-scene-title {
   max-width: calc(100% - 32px);
+}
+.hub-art {
+  position: relative;
+  overflow: hidden;
+}
+.hub-preview-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0;
+}
+.hub-preview-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.hub-card.preview-ready:hover .hub-preview-image,
+.hub-card.preview-ready:focus-within .hub-preview-image {
+  opacity: 1;
+}
+@media (hover: none) {
+  .hub-card.preview-ready .hub-preview-image {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hub-preview-image {
+    transition: none;
+  }
 }

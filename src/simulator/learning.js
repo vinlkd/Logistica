@@ -21,7 +21,7 @@ export function installLearningFeatures({
 }) {
   const definition = missionDefinition(environment, steps),
     mission = createMission(definition),
-    store = createProgressStore(environment);
+    store = createProgressStore(environment, { demo: true });
   const host = document.querySelector(".inspector-panel"),
     panel = document.createElement("section");
   panel.className = "panel-section learning-panel";
@@ -122,10 +122,9 @@ export function installLearningFeatures({
         await store.save(snapshot, { replace: replacing });
         lastSaved = fingerprint;
         panel.querySelector("[data-retry-save]").hidden = true;
-        saveLabel.textContent =
-          import.meta.env.MODE === "pages"
-            ? "Demonstração salva neste navegador."
-            : "Atividade salva na sua conta.";
+        saveLabel.textContent = true
+          ? "Atividade salva neste navegador."
+          : "Atividade salva na sua conta.";
       } catch (error) {
         failureCode = error.code;
         replace = replace || replacing;
@@ -274,7 +273,7 @@ export function installLearningFeatures({
     }
   }
   async function restore() {
-    saveLabel.textContent = "Buscando sua atividade…";
+    saveLabel.textContent = "Carregando atividade deste navegador…";
     try {
       const saved = await store.load();
       if (saved) {
@@ -296,10 +295,9 @@ export function installLearningFeatures({
         saveLabel.textContent =
           "Atividade retomada no ponto salvo. Confira a linha e clique em Iniciar.";
       } else
-        saveLabel.textContent =
-          import.meta.env.MODE === "pages"
-            ? "Demonstração: progresso somente neste navegador."
-            : "Seu progresso será salvo nesta conta.";
+        saveLabel.textContent = true
+          ? "Seu progresso fica salvo neste navegador."
+          : "Seu progresso será salvo nesta conta.";
       ready = true;
       lastSaved = JSON.stringify(envelope());
     } catch (error) {
@@ -373,20 +371,17 @@ export function installLearningFeatures({
     if (!target || closed) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    await save(true);
-    try {
-      await store.flush();
-    } catch {
-      blocked = true;
-    }
-    if (blocked) {
-      pendingExit = target;
-      panel.querySelector("[data-exit-unsaved]").hidden = false;
-      panel.querySelector("[data-retry-save]").hidden = false;
-      saveLabel.textContent =
-        "As alterações ainda não foram salvas. Tente novamente ou escolha sair sem salvar.";
-      return;
-    }
+    // Saving must never trap the learner inside a scene. Anonymous checkpoints
+    // are local; bound the last flush and always honor the navigation request.
+    await Promise.race([
+      (async () => {
+        try {
+          await save(true);
+          await store.flush();
+        } catch {}
+      })(),
+      new Promise((resolve) => setTimeout(resolve, 400)),
+    ]);
     finishExit(target);
   };
   document.addEventListener("click", beforeExit, true);

@@ -6,7 +6,7 @@ import { ENVIRONMENTS, createSimulation, MATERIALS } from "./simulation.js";
 import { createLabScene } from "./lab-scene.js";
 
 import { labIcon as icon, renderLabShell } from "./lab-shell.js";
-const staticDemo = import.meta.env.MODE === "pages";
+const staticDemo = true;
 const root = document.querySelector("#app");
 root.innerHTML = renderLabShell({
   ENVIRONMENTS,
@@ -388,30 +388,31 @@ $("#batch-form").onsubmit = (e) => {
 $("#zoom-in").onclick = () => view?.zoom(0.85);
 $("#zoom-out").onclick = () => view?.zoom(1.15);
 $("#retry").onclick = () => location.reload();
-$("#report").onclick = () => {
-  const state = simulation.snapshot;
-  const blob = new Blob(
-    [
-      JSON.stringify(
-        {
-          title: "Relatório da simulação logística",
-          generatedAt: new Date().toISOString(),
-          selectedEnvironment: selected,
-          ...state,
-        },
-        null,
-        2,
-      ),
-    ],
-    { type: "application/json" },
-  );
-  const url = URL.createObjectURL(blob),
-    link = document.createElement("a");
-  link.href = url;
-  link.download = "relatorio-logistica.json";
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-};
+if ($("#report"))
+  $("#report").onclick = () => {
+    const state = simulation.snapshot;
+    const blob = new Blob(
+      [
+        JSON.stringify(
+          {
+            title: "Relatório da simulação logística",
+            generatedAt: new Date().toISOString(),
+            selectedEnvironment: selected,
+            ...state,
+          },
+          null,
+          2,
+        ),
+      ],
+      { type: "application/json" },
+    );
+    const url = URL.createObjectURL(blob),
+      link = document.createElement("a");
+    link.href = url;
+    link.download = "relatorio-logistica.json";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 try {
   view = createLabScene(
     $("#world"),

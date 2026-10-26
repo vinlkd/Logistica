@@ -100,7 +100,7 @@ test("compiled Pages demo uses hashed subdirectory assets and excludes backend a
   });
 });
 
-test("normal production build retains authentication and keeps server-only secrets out of client files", async () => {
+test("normal production build opens the environment chooser without login and keeps secrets out of client files", async () => {
   const files = outputs(
     await build({
       root,
@@ -113,13 +113,15 @@ test("normal production build retains authentication and keeps server-only secre
     .filter((file) => file.type === "chunk")
     .map((file) => file.code)
     .join("\n");
-  assert.ok(
+  assert.equal(
     javascript.includes("/api/auth/"),
-    "Normal build must retain the authenticated entry",
+    false,
+    "Prototype must open without backend authentication",
   );
-  assert.ok(
+  assert.equal(
     javascript.includes("current-password"),
-    "Normal build must retain the login form",
+    false,
+    "Prototype must not load the login form",
   );
   for (const privateMarker of [
     "AUTH_JWT_SECRET",

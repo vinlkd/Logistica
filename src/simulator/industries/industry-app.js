@@ -28,7 +28,7 @@ export async function launchIndustry(id) {
         : p.description,
   }));
   const root = document.querySelector("#app"),
-    staticDemo = import.meta.env.MODE === "pages";
+    staticDemo = true;
   // Exactly the same DOM and CSS as cookware; only process content is supplied.
   root.innerHTML = renderLabShell({
     ENVIRONMENTS: environments,
@@ -441,28 +441,29 @@ export async function launchIndustry(id) {
   $("#logout")?.addEventListener("click", () =>
     document.dispatchEvent(new Event("auth:logout")),
   );
-  $("#report").onclick = () => {
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            title: definition.name,
-            generatedAt: new Date().toISOString(),
-            ...session.snapshot,
-          },
-          null,
-          2,
-        ),
-      ],
-      { type: "application/json" },
-    );
-    const url = URL.createObjectURL(blob),
-      link = document.createElement("a");
-    link.href = url;
-    link.download = "relatorio-logistica.json";
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
+  if ($("#report"))
+    $("#report").onclick = () => {
+      const blob = new Blob(
+        [
+          JSON.stringify(
+            {
+              title: definition.name,
+              generatedAt: new Date().toISOString(),
+              ...session.snapshot,
+            },
+            null,
+            2,
+          ),
+        ],
+        { type: "application/json" },
+      );
+      const url = URL.createObjectURL(blob),
+        link = document.createElement("a");
+      link.href = url;
+      link.download = "relatorio-logistica.json";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
   try {
     view = createLabScene(
       $("#world"),
