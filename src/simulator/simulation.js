@@ -1,3 +1,4 @@
+import { safeData, numberIn, integerIn } from "./state-validation.js";
 import { getProduct } from "./products.js";
 export const MATERIALS = {
   disc: "Disco de inox",
@@ -584,7 +585,159 @@ export function createSimulation(initialBatch = 12, options = {}) {
     }
     if (force && !wasRunning) running = false;
   }
+  function exportState() {
+    return structuredClone({
+      version: 1,
+      environment: "cookware",
+      product,
+      batch,
+      time,
+      running,
+      emergency,
+      speed,
+      eventId,
+      scope,
+      focus,
+      cells,
+      events,
+      completedUnits,
+    });
+  }
+  function importState(value) {
+    try {
+      if (
+        !safeData(value) ||
+        value.version !== 1 ||
+        value.environment !== "cookware" ||
+        getProduct(value.product).id !== value.product ||
+        !integerIn(value.batch, 1, 50) ||
+        !numberIn(value.time, 0, 1e8) ||
+        ![0.5, 1, 2, 4].includes(value.speed) ||
+        typeof value.emergency !== "boolean" ||
+        !["bench", "line"].includes(value.scope) ||
+        !ENVIRONMENTS.some((e) => e.id === value.focus) ||
+        !Array.isArray(value.cells) ||
+        value.cells.length !== ENVIRONMENTS.length ||
+        !Array.isArray(value.completedUnits) ||
+        !Array.isArray(value.events) ||
+        value.events.length > 120 ||
+        !integerIn(value.eventId, 0, 1e9)
+      )
+        return false;
+      const next = structuredClone(value),
+        seen = new Set();
+      function validUnit(unit) {
+        if (
+          !unit ||
+          unit.product !== next.product ||
+          !/^UT-\d{3}$/.test(unit.id) ||
+          !integerIn(Number(unit.id.slice(3)), 1, next.batch) ||
+          seen.has(unit.id) ||
+          !Object.hasOwn(MATERIALS, unit.material) ||
+          !Array.isArray(unit.history) ||
+          unit.history.length > 100
+        )
+          return false;
+        seen.add(unit.id);
+        return unit.history.every(
+          (h) =>
+            ENVIRONMENTS.some(
+              (e) =>
+                e.id === h.environment && e.recipe.some((r) => r.id === h.step),
+            ) && numberIn(h.time, 0, next.time + 0.001),
+        );
+      }
+      for (const [i, cell] of next.cells.entries()) {
+        const e = ENVIRONMENTS[i];
+        if (
+          cell.id !== e.id ||
+          !["auto", "guided", "manual"].includes(cell.mode) ||
+          !["idle", "feeding", "processing", "unloading"].includes(
+            cell.phase,
+          ) ||
+          !numberIn(cell.progress, 0, 1) ||
+          !numberIn(cell.processing, 0, e.cycle + 0.00001) ||
+          !integerIn(cell.done, 0, next.batch) ||
+          !integerIn(cell.committed, 0, e.recipe.length) ||
+          !integerIn(cell.lastStage, -1, e.recipe.length) ||
+          typeof cell.guard !== "boolean" ||
+          typeof cell.fault !== "boolean" ||
+          !Array.isArray(cell.stock) ||
+          cell.stock.length > next.batch ||
+          !cell.commands ||
+          !["motor", "work", "transfer"].every(
+            (k) => typeof cell.commands[k] === "boolean",
+          )
+        )
+          return false;
+        if (
+          (cell.phase === "idle") !== !cell.unit ||
+          !cell.stock.every(validUnit) ||
+          (cell.unit && !validUnit(cell.unit))
+        )
+          return false;
+        if (
+          (cell.phase === "feeding" && cell.progress > 0.5) ||
+          (cell.phase === "processing" &&
+            Math.abs(cell.progress - 0.5) > 0.00001) ||
+          (cell.phase === "unloading" && cell.progress < 0.5)
+        )
+          return false;
+        cell.permit = null;
+        cell.commands = { motor: false, work: false, transfer: false };
+      }
+      if (!next.completedUnits.every(validUnit) || seen.size !== next.batch)
+        return false;
+      const terminalIndex =
+        next.scope === "line"
+          ? 7
+          : ENVIRONMENTS.findIndex((e) => e.id === next.focus);
+      if (next.cells[terminalIndex].done !== next.completedUnits.length)
+        return false;
+      if (next.scope === "line")
+        for (let i = 0; i < 7; i++) {
+          const following = next.cells[i + 1];
+          if (
+            next.cells[i].done !==
+            following.done + following.stock.length + (following.unit ? 1 : 0)
+          )
+            return false;
+        }
+      else if (
+        next.cells.some(
+          (c, i) => i !== terminalIndex && (c.done || c.unit || c.stock.length),
+        )
+      )
+        return false;
+      if (
+        !next.events.every(
+          (e) =>
+            integerIn(e.id, 1, next.eventId) &&
+            numberIn(e.time, 0, next.time + 0.001) &&
+            typeof e.message === "string",
+        )
+      )
+        return false;
+      product = next.product;
+      batch = next.batch;
+      time = next.time;
+      emergency = next.emergency;
+      speed = next.speed;
+      eventId = next.eventId;
+      scope = next.scope;
+      focus = next.focus;
+      cells = next.cells;
+      events = next.events;
+      completedUnits = next.completedUnits;
+      running = false;
+      return true;
+    } catch {
+      return false;
+    }
+  }
   return {
+    exportState,
+    importState,
     start,
     stop,
     step: tick,

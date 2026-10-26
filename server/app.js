@@ -16,6 +16,9 @@ import {
   validateEnrollment,
 } from "./security.js";
 import { createMailer } from "./mailer.js";
+import { createProgressRepository, progressError } from "./progress.js";
+import { MAX_PROGRESS_BYTES } from "../src/progress-format.js";
+import { validateSavedSimulation } from "./progress-validation.js";
 
 const SESSION_SECONDS = 8 * 60 * 60;
 const RESET_SECONDS = 20 * 60;
@@ -32,23 +35,23 @@ const publicUser = (user) => ({
   enrollment: user.enrollment ?? null,
 });
 
-async function readJson(req) {
+async function readJson(req, limit = 8192) {
   if (!/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"] ?? ""))
     throw fail(415, "Envie os dados em JSON.");
-  if (Number(req.headers["content-length"]) > 8192) {
+  if (Number(req.headers["content-length"]) > limit) {
     req.resume();
     throw fail(413, "Solicitação muito grande.");
   }
-  let body = "",
+  let chunks = [],
     bytes = 0;
   for await (const chunk of req) {
     bytes += chunk.length;
-    if (bytes > 8192) throw fail(413, "Solicitação muito grande.");
-    body += chunk.toString("utf8");
+    if (bytes > limit) throw fail(413, "Solicitação muito grande.");
+    chunks.push(Buffer.from(chunk));
   }
   let result;
   try {
-    result = JSON.parse(body);
+    result = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
     throw fail(400, "Dados inválidos.");
   }
@@ -227,6 +230,7 @@ export async function createAuthServer(options = {}) {
     });
     res.end(JSON.stringify(body));
   }
+  const progress = createProgressRepository({ db, clock: () => options.clock?.() ?? Date.now(), validateSimulation: validateSavedSimulation });
   const server = createServer(async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Pragma", "no-cache");
@@ -237,6 +241,24 @@ export async function createAuthServer(options = {}) {
       cleanup();
       const url = new URL(req.url, "http://local.invalid");
       const path = url.pathname;
+      if (path === "/api/progress" || path.startsWith("/api/progress/")) {
+        const peer = req.socket.remoteAddress ?? "unknown";
+        if (req.headers["sec-fetch-site"] === "cross-site" || req.headers.origin && !origins.has(req.headers.origin)) throw progressError(403, "FORBIDDEN_ORIGIN", "Origem da solicitação não permitida.");
+        if (!["GET", "PUT"].includes(req.method)) return send(res, 405, { error: "Método não permitido.", code: "METHOD_NOT_ALLOWED" });
+        if (req.method === "PUT" && (!origins.has(req.headers.origin) || req.headers["x-requested-with"] !== "Logistica")) throw progressError(403, "FORBIDDEN_ORIGIN", "Solicitação não autorizada. Recarregue a página.");
+        const session = await sessionUser(req);
+        if (!session) { rateLimit(`progress-unauthenticated:${peer}`, 60, 60); throw progressError(401, "UNAUTHENTICATED", "Entre novamente para salvar ou retomar seu progresso."); }
+        const owner = session.user.id;
+        rateLimit(`progress-user:${owner}`, 120, 60);
+        if (path === "/api/progress") {
+          if (req.method !== "GET") return send(res, 405, { error: "Método não permitido.", code: "METHOD_NOT_ALLOWED" });
+          return send(res, 200, { owner, ...progress.list(owner) });
+        }
+        const environment = path.slice("/api/progress/".length);
+        if (req.method === "GET") return send(res, 200, { owner, ...progress.load(owner, environment) });
+        const body = await readJson(req, MAX_PROGRESS_BYTES + 2048);
+        return send(res, 200, { owner, ...progress.save(owner, environment, body) });
+      }
       if (!path.startsWith("/api/auth/"))
         return send(res, 404, { error: "Rota não encontrada." });
       // Forwarded IPs are intentionally ignored; only the trusted local peer is used.
@@ -456,6 +478,7 @@ export async function createAuthServer(options = {}) {
           "Falha interna no serviço de autenticação.",
         );
       send(res, status, {
+        ...(error.publicCode ? { code: error.publicCode } : {}),
         error:
           status === 500
             ? "Não foi possível concluir. Tente novamente."

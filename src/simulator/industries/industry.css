@@ -1,0 +1,585 @@
+.hub,
+.industry-lab {
+  min-height: 100vh;
+  background: #edf2f6;
+  color: #223b50;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+.hub .app-header,
+.industry-lab .app-header {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  background: #f7f9fb;
+  border-bottom: 2px solid #164193;
+  padding: 12px 26px;
+}
+.hub-logo {
+  object-fit: contain;
+}
+.hub .brand,
+.industry-lab .brand {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+.hub .brand span,
+.industry-lab .brand span {
+  font-size: 12px;
+  color: #647b8d;
+}
+.hub-main {
+  max-width: 1340px;
+  margin: auto;
+  padding: 40px 32px;
+}
+.hub-intro {
+  margin-bottom: 28px;
+  max-width: 760px;
+}
+.hub-intro > p {
+  color: #496b82;
+  margin: 0 0 10px;
+}
+.hub-intro h1 {
+  font-size: clamp(27px, 3vw, 40px);
+  font-weight: 650;
+  letter-spacing: -1px;
+  line-height: 1.15;
+  margin: 0 0 14px;
+  color: #173f64;
+}
+.hub-intro > div {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #587083;
+}
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+.hub-card {
+  background: #fff;
+  border: 1px solid #d9e2e9;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 4px solid var(--industry);
+}
+.hub-art {
+  background: #f5f8fa;
+  padding: 10px 4px;
+}
+.hub-art svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.hub-copy {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.hub-copy > span {
+  font-size: 12px;
+  color: var(--industry);
+  font-weight: 600;
+}
+.hub-copy h2 {
+  font-size: 21px;
+  line-height: 1.2;
+  margin: 10px 0;
+  min-height: 52px;
+}
+.hub-copy p {
+  line-height: 1.6;
+  color: #60788b;
+  flex: 1;
+}
+.hub-enter {
+  margin-top: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 4px;
+  background: var(--industry);
+  color: white;
+  text-decoration: none;
+  font-weight: 600;
+}
+.hub-enter:hover {
+  filter: brightness(0.9);
+}
+.hub-enter:focus-visible,
+.industry-lab :focus-visible {
+  outline: 3px solid #86abc9;
+  outline-offset: 3px;
+}
+.hub-note {
+  color: #6b8090;
+  margin-top: 24px;
+  font-size: 13px;
+}
+.industry-back {
+  margin-left: auto;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.industry-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: calc(100vh - 76px);
+}
+.industry-stage {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.industry-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background: #e5edf3;
+  border-bottom: 1px solid #cdd9e3;
+}
+.industry-toolbar button,
+.industry-toolbar select,
+.industry-panel button,
+.industry-panel select,
+.industry-panel input {
+  font: inherit;
+  border: 1px solid #bfcfdd;
+  border-radius: 4px;
+  background: #f8fafc;
+  color: #28465f;
+  padding: 9px 11px;
+}
+.industry-toolbar label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+.industry-lab button {
+  cursor: pointer;
+}
+.industry-lab button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.industry-lab button.primary {
+  background: var(--industry);
+  border-color: var(--industry);
+  color: white;
+}
+.industry-canvas-host {
+  position: relative;
+  min-height: 420px;
+  height: calc(100vh - 225px);
+  flex: 1;
+  overflow: hidden;
+  background: #dce5ed;
+}
+.industry-canvas-host canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.industry-scene-title {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  max-width: 70%;
+  pointer-events: none;
+}
+.industry-scene-title h1 {
+  font-size: 22px;
+  color: #164193;
+  margin: 0 0 6px;
+}
+.industry-scene-title p {
+  font-size: 12px;
+  max-width: 450px;
+  line-height: 1.5;
+  margin: 0;
+  color: #587185;
+}
+.industry-timeline {
+  display: flex;
+  gap: 0;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  background: #eef3f7;
+  border-top: 1px solid #cad7e2;
+}
+.industry-timeline li {
+  flex: 1;
+  padding: 11px 8px;
+  text-align: center;
+  font-size: 11px;
+  border-right: 1px solid #d3dee7;
+  color: #617c90;
+}
+.industry-timeline span {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 10px;
+}
+.industry-timeline li.current {
+  background: var(--industry);
+  color: #fff;
+}
+.industry-timeline li.done {
+  background: #e0eee8;
+  color: #2b7055;
+}
+.industry-panel {
+  background: #f8fafb;
+  border-left: 1px solid #cad6df;
+  padding: 18px;
+  overflow: auto;
+  max-height: calc(100vh - 76px);
+}
+.industry-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0 0 16px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.industry-check {
+  flex-direction: row;
+  align-items: center;
+  font-weight: 400;
+}
+.industry-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--industry);
+}
+.industry-operation {
+  padding: 16px 0;
+  border-top: 1px solid #d7e0e7;
+  border-bottom: 1px solid #d7e0e7;
+  margin-bottom: 18px;
+}
+.industry-operation > span {
+  font-size: 12px;
+  color: var(--industry);
+  font-weight: 650;
+}
+.industry-operation h2 {
+  font-size: 21px;
+  margin: 8px 0;
+}
+.industry-operation p {
+  line-height: 1.55;
+  font-size: 12px;
+  color: #5b7487;
+}
+.industry-operation progress {
+  width: 100%;
+  height: 8px;
+  margin-bottom: 12px;
+  accent-color: var(--industry);
+}
+.industry-operation button {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+#industry-fault {
+  color: #b54434;
+  font-weight: 600;
+  min-height: 18px;
+}
+.industry-section-label {
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+#industry-readings {
+  border-top: 1px solid #d7e0e7;
+  padding-top: 15px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+#industry-readings dt {
+  color: #6c8191;
+  margin-top: 9px;
+}
+#industry-readings dd {
+  margin: 2px 0;
+  font-weight: 600;
+}
+.industry-safety {
+  display: flex;
+  gap: 8px;
+  margin: 20px 0;
+}
+.industry-safety button:first-child {
+  background: #a73e32;
+  color: white;
+  border-color: #a73e32;
+}
+#industry-summary {
+  font-size: 12px;
+  color: #496476;
+}
+#industry-webgl-error {
+  position: absolute;
+  inset: 35% 10%;
+  background: #fff;
+  padding: 24px;
+  color: #9b362d;
+}
+.hub a,
+.industry-lab a {
+  transition: filter 0.12s;
+}
+@media (max-width: 1100px) {
+  .hub-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .industry-workspace {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+  .industry-panel {
+    padding: 14px;
+  }
+  .industry-toolbar {
+    gap: 6px;
+  }
+  .industry-scene-title {
+    max-width: 85%;
+  }
+}
+@media (max-width: 720px) {
+  .hub-main {
+    padding: 28px 18px;
+  }
+  .hub-grid {
+    grid-template-columns: 1fr;
+  }
+  .hub-card {
+    display: grid;
+    grid-template-columns: 34% 1fr;
+  }
+  .hub-art {
+    display: flex;
+    align-items: center;
+  }
+  .hub-copy {
+    padding: 16px;
+  }
+  .hub-copy h2 {
+    min-height: 0;
+    font-size: 20px;
+  }
+  .hub-copy p {
+    font-size: 13px;
+  }
+  .hub .app-header,
+  .industry-lab .app-header {
+    padding: 10px 14px;
+    gap: 12px;
+  }
+  .hub-logo {
+    width: 94px;
+    height: 36px;
+  }
+  .industry-workspace {
+    display: block;
+  }
+  .industry-panel {
+    max-height: none;
+    border-left: 0;
+    border-top: 1px solid #cad6df;
+  }
+  .industry-canvas-host {
+    height: 460px;
+    min-height: 360px;
+  }
+  .industry-timeline {
+    overflow: auto;
+  }
+  .industry-timeline li {
+    min-width: 90px;
+  }
+  .industry-back {
+    font-size: 11px;
+  }
+  .industry-toolbar label {
+    font-size: 11px;
+  }
+  .industry-scene-title h1 {
+    font-size: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hub a,
+  .industry-lab a {
+    transition: none;
+  }
+}
+
+/* Match the established SENAI cookware laboratory chrome. */
+.industry-lab .app-header {
+  height: 58px;
+  min-height: 58px;
+  padding: 7px 22px;
+  background: #e8eef4;
+  gap: 20px;
+}
+.industry-lab .hub-logo {
+  height: 43px;
+  width: 126px;
+}
+.industry-lab .brand strong {
+  font-size: 14px;
+  color: #164193;
+}
+.industry-lab .brand span {
+  font-size: 11px;
+}
+.industry-workspace {
+  grid-template-columns: minmax(0, 1fr) 306px;
+  min-height: calc(100vh - 58px);
+}
+.industry-panel {
+  max-height: calc(100vh - 58px);
+  background: #e7edf4;
+}
+.industry-toolbar {
+  min-height: 48px;
+  padding: 8px 12px;
+  background: #dfe7f0;
+}
+.industry-toolbar button,
+.industry-toolbar select {
+  font-size: 12px;
+  padding: 8px 10px;
+}
+.industry-canvas-host {
+  height: calc(100vh - 174px);
+  background: #dce4ed;
+}
+.industry-timeline {
+  background: #dfe7f0;
+}
+.industry-scene-title h1 {
+  font-size: 22px;
+}
+.industry-lab input,
+.industry-lab select {
+  background: #f5f8fb;
+}
+.industry-lab .industry-operation {
+  border-color: #cbd7e2;
+}
+.industry-lab .industry-back {
+  font-size: 12px;
+}
+@media (max-width: 720px) {
+  .industry-lab .app-header {
+    height: auto;
+    min-height: 58px;
+    padding: 8px 12px;
+    gap: 10px;
+  }
+  .industry-lab .hub-logo {
+    width: 90px;
+  }
+  .industry-workspace {
+    display: block;
+  }
+  .industry-canvas-host {
+    height: 460px;
+  }
+  .industry-panel {
+    max-height: none;
+  }
+  .industry-lab .brand strong {
+    font-size: 12px;
+  }
+}
+
+body.industry-page {
+  min-width: 0;
+  overflow: auto;
+}
+body.industry-page #app {
+  height: auto;
+  min-height: 100dvh;
+  min-width: 0;
+  display: block;
+  overflow: visible;
+}
+.hub,
+.industry-lab {
+  min-width: 0;
+  max-width: 100%;
+}
+.hub .brand,
+.industry-lab .brand {
+  min-width: 0;
+}
+.hub .app-header,
+.industry-lab .app-header {
+  min-width: 0;
+}
+.industry-stage,
+.industry-panel {
+  min-width: 0;
+}
+@media (max-width: 720px) {
+  .hub .app-header,
+  .industry-lab .app-header {
+    flex-wrap: wrap;
+  }
+  .industry-lab .industry-back {
+    margin-left: 0;
+    font-size: 12px;
+    padding: 6px 0;
+  }
+  .industry-lab .brand {
+    flex: 1;
+    min-width: 150px;
+  }
+  .hub .brand {
+    min-width: 140px;
+  }
+  .industry-toolbar {
+    flex-wrap: wrap;
+  }
+  .industry-toolbar button,
+  .industry-toolbar select {
+    max-width: 100%;
+  }
+  .industry-panel input,
+  .industry-panel select {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+body.industry-page .industry-lab,
+body.industry-page .hub {
+  width: 100%;
+  min-width: 0;
+}
+.industry-lab .brand strong {
+  white-space: normal;
+}
+.industry-scene-title {
+  max-width: calc(100% - 32px);
+}
