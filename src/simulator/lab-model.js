@@ -710,30 +710,36 @@ export function updateLabModel(
     pot.handles.scale.setScalar(1);
   }
   applyCookwareFinish(pot.metal, p.polish);
-  if (model.platform) model.platform.position.y = p.support - 0.04;
-  if (model.piston) {
+  const mechanismActive = !!cell.part || !model.motionInitialized;
+  model.motionInitialized = true;
+  if (mechanismActive && model.platform)
+    model.platform.position.y = p.support - 0.04;
+  if (mechanismActive && model.piston) {
     model.piston.position.y = (0.22 + p.support - 0.08) / 2;
     model.piston.scale.y = p.support - 0.3;
   }
-  if (model.head)
+  if (mechanismActive && model.head)
     model.head.position.y = cell.id === "production" ? p.headY : p.packingHeadY;
-  if (model.ram) {
+  if (mechanismActive && model.ram) {
     const end =
       model.head.position.y + (cell.id === "production" ? 0.13 : 0.065);
     model.ram.position.y = (model.ramAnchor + end) / 2;
     model.ram.scale.y = (model.ramAnchor - end) / 0.8;
   }
-  for (const clamp of model.clamps)
+  for (const clamp of mechanismActive ? model.clamps : [])
     clamp.object.position.x = clamp.side * (0.86 - 0.18 * p.fixation);
-  if (model.fork) model.fork.position.set(0, p.forkLift, p.forkZ);
-  if (model.liftSupport) updateLiftSupport(model.liftSupport, p);
+  if (mechanismActive && model.fork)
+    model.fork.position.set(0, p.forkLift, p.forkZ);
+  if (mechanismActive && model.liftSupport)
+    updateLiftSupport(model.liftSupport, p);
   if (model.guard) model.guard.position.x = cell.guard ? 0 : 3.1;
-  if (model.receiving)
+  if (mechanismActive && model.receiving)
     updateReceiving(model.receiving, { cell, product, layout, running });
-  if (model.assembler)
+  if (mechanismActive && model.assembler)
     updateHandleAssembler(model.assembler, { pose: p, cell, product, layout });
-  if (model.rawLoader) updateRawLoader(model.rawLoader, p);
-  if (model.workstation)
+  if (!cell.part && model.assembler) model.assembler.handles.visible = false;
+  if (mechanismActive && model.rawLoader) updateRawLoader(model.rawLoader, p);
+  if (mechanismActive && model.workstation)
     updateWorkstation(model.workstation, {
       pose: p,
       cell,
@@ -742,7 +748,7 @@ export function updateLabModel(
       product,
       layout,
     });
-  if (model.truck)
+  if (mechanismActive && model.truck)
     model.truck.lift.position.y =
       cell.id === "shipping" ? p.support - CONVEYOR_TOP : 0;
   const c = model.blank;

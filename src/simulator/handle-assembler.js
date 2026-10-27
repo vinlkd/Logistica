@@ -243,7 +243,8 @@ export function updateHandleAssembler(model, { pose, cell, product, layout }) {
   for (const { tool, point, fingers, driver, bit, boom } of model.tools) {
     for (const { finger, side } of fingers)
       finger.position.x = side * (point.half + 0.0175 + opening);
-    driver.rotation.y = t * 50;
+    if (active && t >= 0.75 && t <= 0.88)
+      driver.rotation.y = clamp((t - 0.75) / 0.13) * 8 * Math.PI;
     driver.position.y = 0.17 + 0.06 * (1 - drive);
     bit.position.y = 0.045 + 0.06 * (1 - drive);
     driver.visible = active && t >= 0.75 && t <= 0.88;

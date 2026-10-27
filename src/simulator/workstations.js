@@ -1,3 +1,7 @@
+const smoothTravel = (value) => {
+  const t = clamp(value);
+  return t * t * (3 - 2 * t);
+};
 const clamp = (value) =>
   Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
 
@@ -321,6 +325,21 @@ export function buildWorkstation({
       0.045,
       m.steel,
     );
+    // Second slide parks the complete wheel/motor behind the full handled-product corridor.
+    bar(
+      group,
+      [retractedX, bridgeY, 0],
+      [retractedX, bridgeY, rear],
+      0.035,
+      m.steel,
+    );
+    bar(
+      group,
+      [retractedX, bridgeY, rear],
+      [mastX, bridgeY, rear],
+      0.035,
+      m.steel,
+    );
     const carriage = box(
       group,
       retractedX,
@@ -457,7 +476,7 @@ export function updateWorkstation(
   const processing = !!cell.part && cell.phase === "processing";
   const step = pose.step ?? "idle",
     t = clamp(pose.t);
-  const origin = Number.isFinite(pose.y) ? pose.y : model.origin;
+  const origin = model.origin;
   const bottom = layout?.potBottom ?? model.bottom;
   let fixation = 0;
   if (processing) {
@@ -489,8 +508,9 @@ export function updateWorkstation(
     model.rotary.rotation.y = pose.polishAngle ?? 0;
     const lowY = bottom + f.radius * 2 + 0.035,
       highY = product.height - 0.025;
+    const polishT = processing && step === "polish" ? t : 0;
     const localY =
-      lowY + (highY - lowY) * (0.5 - 0.5 * Math.cos(4 * Math.PI * t));
+      lowY + (highY - lowY) * (0.5 - 0.5 * Math.cos(4 * Math.PI * polishT));
     const surface = bodySurface(product, localY),
       norm = Math.hypot(1, surface.slope);
     f.centreY = localY - (surface.slope * f.radius) / norm;
@@ -505,16 +525,24 @@ export function updateWorkstation(
     f.tool.position.set(
       f.retractedX + (f.contactX - f.retractedX) * contact,
       origin + f.centreY,
-      pose.z ?? 0,
+      (pose.z ?? 0) +
+        model.rear *
+          (1 -
+            (processing && step === "polish"
+              ? smoothTravel(t / 0.12) * (1 - smoothTravel((t - 0.88) / 0.12))
+              : 0)),
     );
     f.carriage.position.x = f.tool.position.x;
+    f.carriage.position.z = f.tool.position.z - 0.07;
     const low = origin + f.centreY + 0.1,
       high = f.bridgeY;
-    f.link.position.set(f.tool.position.x, (low + high) / 2, -0.23);
+    f.link.position.set(
+      f.tool.position.x,
+      (low + high) / 2,
+      f.tool.position.z - 0.23,
+    );
     f.link.scale.y = Math.max(0.01, (high - low) / f.linkLength);
-    if (running && cell.outputs?.work && f.active)
-      model.clock += Math.max(0, Math.min(0.1, dt));
-    f.wheel.rotation.z = model.clock * 24;
+    if (processing && step === "polish") f.wheel.rotation.z = t * 24 * Math.PI;
     const status = step === "polish" && processing ? "working" : "idle";
     model.panel.update(
       [
