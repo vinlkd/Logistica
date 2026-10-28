@@ -1,5 +1,11 @@
 export const MISSION_VERSION = 1;
-export function missionDefinition(environment, steps) {
+export function missionDefinition(
+  environment,
+  steps,
+  quantity = environment === "beverages" ? 108 : 12,
+  options = {},
+) {
+  const target = environment === "beverages" && quantity === 108 ? 108 : 12;
   const objectives = {
     cookware:
       "Produzir, conferir, embalar e expedir 12 panelas pelo fluxo completo.",
@@ -11,40 +17,56 @@ export function missionDefinition(environment, steps) {
       "Cortar, furar, montar e embalar 12 móveis com as medidas do pedido.",
   };
   return {
-    id: `${environment}-order-12`,
+    id: `${environment}-order-${target}`,
     version: 1,
-    target: 12,
-    objective: objectives[environment],
+    target,
+    objective:
+      options.onDemand ? `Produzir e armazenar ${target} ${environment==='cookware'?'panelas':'garrafas'}. Gere pedidos, separe e confira as caixas antes de autorizar cada expedição.` : target === 108
+        ? "Higienizar, envasar e expedir 108 garrafas em 12 caixas de 9, fechadas e identificadas."
+        : objectives[environment],
     steps: steps.map((s) => ({ id: s.id, label: s.label ?? s.short })),
   };
 }
 export function missionEvidence(snapshot, definition) {
+  const shipped=snapshot.onDemand?snapshot.inventory.boxes.filter(box=>box.lotId===snapshot.inventory.lotId&&box.status==='shipped').reduce((n,box)=>n+box.quantity,0)+(snapshot.completedUnits??[]).filter(unit=>unit.shipped||unit.material==='shipped-box').length:null;
   if (snapshot.cells)
     return {
       product: snapshot.product,
       scope: snapshot.scope,
       quantity: snapshot.batch,
-      done: snapshot.done,
+      done: shipped??snapshot.done,
       elapsed: snapshot.time,
       checkpoints: Object.fromEntries(
-        snapshot.cells.map((c) => [c.id, c.done]),
+        snapshot.cells.map((c) => [c.id, c.id==='shipping'&&shipped!==null?shipped:c.done]),
       ),
       fault: snapshot.emergency
         ? "emergency"
         : (snapshot.cells.find((c) => !c.guard || c.fault)?.id ?? ""),
     };
+  const caseFlags = (field) => {
+    const units = [...(snapshot.completedUnits ?? [])];
+    if (snapshot.unit && !units.some((unit) => unit.id === snapshot.unit.id))
+      units.push(snapshot.unit);
+    return units.filter((unit) => unit[field]).length;
+  };
   return {
     product: snapshot.product.id,
     scope: snapshot.scope,
     quantity: snapshot.total,
-    done: snapshot.done,
+    done: shipped??snapshot.done,
     elapsed: snapshot.elapsed,
     checkpoints: Object.fromEntries(
       definition.steps.map((step) => [
         step.id,
-        new Set(
-          snapshot.history.filter((h) => h.step === step.id).map((h) => h.unit),
-        ).size,
+        definition.id?.startsWith("beverages-") && step.id === "seal"
+          ? caseFlags("caseIdentified")
+          : definition.id?.startsWith("beverages-") && step.id === "ship"
+            ? shipped??caseFlags("shipped")
+            : new Set(
+                snapshot.history
+                  .filter((h) => h.step === step.id)
+                  .map((h) => h.unit),
+              ).size,
       ]),
     ),
     fault: snapshot.fault || snapshot.emergency ? "operation" : "",

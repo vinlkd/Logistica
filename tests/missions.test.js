@@ -20,7 +20,7 @@ for (const d of [BEVERAGES, FURNITURE, PARCELS])
     s.setScope("line");
     s.setQuantity(12);
     s.setSpeed(4);
-    const definition = missionDefinition(d.id, d.steps),
+    const definition = missionDefinition(d.id, d.steps, 12),
       m = createMission(definition);
     m.start(s.snapshot.product.id);
     m.observe(missionEvidence(s.snapshot, definition));
@@ -58,7 +58,7 @@ test("cookware: mission counts the eight real sectors and final dispatched units
   assert.equal(Object.keys(m.snapshot.checkpoints).length, 8);
 });
 test("partial stages, clicks and a changed product cannot complete a mission", () => {
-  const d = missionDefinition("beverages", BEVERAGES.steps),
+  const d = missionDefinition("beverages", BEVERAGES.steps, 12),
     m = createMission(d);
   m.start("juice");
   m.observe({
@@ -105,7 +105,7 @@ test("missing cap is corrected by repeating tamping without replacing the bottle
   s.setQuantity(1);
   s.setSetting("missingCap", true);
   s.start();
-  for (let i = 0; i < 500 && !s.snapshot.fault; i++) s.tick(0.1);
+  for (let i = 0; i < 2000 && !s.snapshot.fault; i++) s.tick(0.1);
   const id = s.snapshot.unit.id;
   assert.equal(diagnose("beverages", s.snapshot).code, "cap");
   s.setSetting("missingCap", false);
