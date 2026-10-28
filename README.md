@@ -50,13 +50,11 @@ Colisores da estrutura verificam o volume varrido pela peça entre quadros e blo
 
 ## Escolha de ambientes
 
-Depois do login (ou diretamente na demonstração Pages), a página inicial apresenta quatro linhas: panelas, bebidas, encomendas e móveis. Cada cartão abre uma simulação própria; **Escolher ambiente** volta à seleção, encerrando a animação e liberando a cena 3D anterior. A autenticação da execução normal continua obrigatória.
+A página inicial abre diretamente, sem login, com duas opções: **Panelas** e **Fábrica de bebidas**. **Escolher ambiente** retorna à seleção e libera a cena anterior. As prévias 3D usam os modelos reais e aparecem ao passar o mouse, focar pelo teclado ou acessar pelo toque. Links antigos de móveis e encomendas retornam à escolha de ambientes; seus dados salvos não são apagados.
 
-Nas três novas linhas, **Interativo** espera autorização a cada operação e **Automático** encadeia as etapas. Ajuste os parâmetros do produto antes de liberar a máquina. Pausar preserva a posição; a emergência exige rearmar e iniciar novamente. As três linhas reutilizam a interface, o piso, a esteira, a iluminação e as câmeras originais das panelas. Selecione uma etapa para treinar na **Bancada individual**, ou escolha **Linha integrada** para conduzir o fluxo completo. O modo **Manual** permite comandar transporte, processo e transferência.
+Em bebidas, **Interativo** espera autorização a cada operação e **Automático** encadeia as etapas. Ajuste os parâmetros antes de liberar a máquina. Pausar preserva a posição; a emergência exige rearmar e iniciar novamente. A linha reutiliza a interface, o piso, a esteira, a iluminação e as câmeras das panelas. **Bancada individual** permite treinar uma etapa, e **Linha integrada** conduz o fluxo completo. **Manual** permite comandar transporte, processo e transferência.
 
-- **Bebidas:** recebimento, lavagem, envase, tampagem, rotulagem/conferência, embalagem e expedição. Volume incorreto e tampa ausente bloqueiam a liberação; após corrigir o abastecimento, **Repetir tampagem** recupera a mesma garrafa.
-- **Encomendas:** descarga, leitura de etiqueta, pesagem, separação, armazenagem endereçada e carregamento. Destino, endereço, calibração, corredor, rota e quantidade são conferidos antes da liberação.
-- **Móveis:** recebimento da madeira, corte, quatro furos de 12 mm, montagem dos montantes, inspeção e embalagem. Comprimento, profundidade e proteção da serra precisam estar corretos. As medidas são referências didáticas da simulação.
+Bebidas inclui recebimento por caminhão, lavagem interna por lança com garra, envase com nível visível, tampagem, aplicação física de rótulo impresso, encaixotamento por garra, fechamento com fita e identificação e expedição de caixas. Cada caixa comporta até **9 garrafas**, em grade 3×3; as garrafas permanecem nas caixas enquanto elas são fechadas, identificadas e carregadas nos endereços livres do caminhão. Volume incorreto e tampa ausente bloqueiam a liberação.
 
 
 ## Missões e retomada
@@ -65,4 +63,6 @@ Cada ambiente oferece uma missão de 12 unidades. O objetivo só é concluído a
 
 **Visão geral** mostra máquinas, filas, peças em processo e saídas. Clique numa máquina ou na sua identificação para abrir a bancada e os controles. As câmeras individuais originais continuam disponíveis.
 
-Na execução com servidor, a atividade é gravada por conta autenticada e por ambiente. Ao voltar, filas, peças, etapa, condições de segurança, missão e resultados são retomados com a simulação pausada. Conflitos entre abas não sobrescrevem a atividade mais recente. A demonstração no GitHub Pages salva somente neste navegador, separada dos registros das contas. Não há painel de professor nem relatório visual/PDF.
+O protótipo salva a atividade neste navegador, tanto localmente quanto no GitHub Pages. A retomada restaura a simulação pausada. Os registros existentes das contas e dos ambientes anteriores são preservados. O protótipo não exibe login nem botão de relatório.
+
+O recebimento traz caixas de matéria-prima do baú antes de retirar os discos ou as garrafas com uma garra. A esteira de bebidas mantém velocidade linear constante, calibrada pelo transporte das panelas. O tempo das operações é separado do deslocamento; o envase mostra o líquido subindo de baixo até o ombro, deixando espaço sob a tampa. A lavagem usa a pinça existente, uma lança que enxágua o interior e aspira a água antes de se recolher.
