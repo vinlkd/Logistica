@@ -1,3 +1,4 @@
+import { cookwareReceivingStateFromCell } from "./cookware-receiving-flow.js";
 const clamp = (v) => Math.max(0, Math.min(1, v));
 const smooth = (v) => {
   v = clamp(v);
@@ -31,6 +32,17 @@ export function receivingState(cell, product) {
       : checked
         ? nominalMass
         : 0;
+  const pickupStage =
+    cell.phase === "feeding" ? cookwareReceivingStateFromCell(cell).stage : "";
+  const pickupTitle = /empty/i.test(pickupStage)
+    ? "Retirando a caixa vazia"
+    : /major|minor/i.test(pickupStage)
+      ? "Abrindo as abas da caixa"
+      : pickupStage === "feedDisc"
+        ? "Levando o disco à balança"
+        : /disc|head|grip/i.test(pickupStage)
+          ? "Retirando o disco com o eletroímã"
+          : "Descarregando a caixa de discos";
   const title = processing
     ? {
         identify: "Identificando o disco",
@@ -38,7 +50,7 @@ export function receivingState(cell, product) {
         release: "Liberando a passagem",
       }[step]
     : cell.phase === "feeding"
-      ? "Posicionando na balança"
+      ? pickupTitle
       : cell.phase === "unloading"
         ? "Material conferido · saída liberada"
         : "Aguardando o próximo disco";

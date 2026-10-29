@@ -8,6 +8,7 @@ export function buildTruck({
   m,
   shipping,
   layout,
+  outwardDoors = false,
 }) {
   const direction = shipping ? 1 : -1,
     truck = new THREE.Group();
@@ -104,7 +105,9 @@ export function buildTruck({
       );
     const door = new THREE.Group();
     door.position.set(-direction * 3.44, deck, z + Math.sign(z) * 0.09);
-    door.rotation.y = (z > 0 ? 1 : -1) * direction * Math.PI;
+    // Fold each leaf toward the dock, outside the cargo body and centre lane.
+    // Folding back along the cutaway side hides the first loaded crate.
+    door.rotation.y = outwardDoors ? 0 : (z > 0 ? 1 : -1) * direction * Math.PI;
     truck.add(door);
     doors.push(door);
     const leaf = halfDepth - 0.06;
