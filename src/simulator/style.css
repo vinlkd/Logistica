@@ -2198,3 +2198,17 @@ select:focus-visible {
     font-size: 10px;
   }
 }
+
+.follow-stages {
+  font-size: 11px;
+  color: #355573;
+}
+.follow-stages input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: #164193;
+}
+.simulation-settings:has(.follow-stages:not([hidden])) {
+  flex-wrap: wrap;
+}

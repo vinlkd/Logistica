@@ -1,19 +1,26 @@
+import {
+  createStageFollower,
+  installStageFollowToggle,
+} from "../stage-follow.js";
+import { installWarehouseOrders } from "../warehouse-orders-ui.js";
+import {
+  getOrderPickDuration,
+  getOrderShipDuration,
+  DEMAND_BEVERAGE_STORAGE_DURATION,
+} from "../warehouse-logistics.js";
 import { installLearningFeatures } from "../learning.js";
 import "../style.css";
 import { renderLabShell, labIcon as icon } from "../lab-shell.js";
 import { createLabScene } from "../lab-scene.js";
 import { createIndustrySession } from "./industry-session.js";
-import { BEVERAGES, FURNITURE } from "./definitions.js";
-import { PARCELS, buildParcelsModel } from "./parcels.js";
-import { buildBeveragesModel, buildFurnitureModel } from "./factory-models.js";
-
+import { BEVERAGES } from "./definitions.js";
+import { buildBeveragesModel } from "./factory-models.js";
 export async function launchIndustry(id) {
-  const definition = {
-    beverages: BEVERAGES,
-    furniture: FURNITURE,
-    parcels: PARCELS,
-  }[id];
-  if (!definition) throw new Error("Ambiente desconhecido");
+  if (id !== "beverages") {
+    location.replace(new URL(import.meta.env.BASE_URL, location.href).href);
+    return;
+  }
+  const definition = BEVERAGES;
   const environments = definition.steps.map((s) => ({
     id: s.id,
     name: s.label,
@@ -42,8 +49,16 @@ export async function launchIndustry(id) {
     const e = $(q);
     if (e && e.textContent !== String(value)) e.textContent = String(value);
   };
-  const session = createIndustrySession(definition);
-  let learning = null;
+  const session = createIndustrySession(definition, {
+    onDemand: true,
+    storageDuration: DEMAND_BEVERAGE_STORAGE_DURATION,
+    fulfillmentDuration: (action, box, index) =>
+      action === "pick"
+        ? getOrderPickDuration(box, index)
+        : getOrderShipDuration(box, index),
+  });
+  let learning = null,
+    ordersPanel = null;
   let selected = definition.steps[0].id,
     view = null,
     disposed = false,
@@ -51,17 +66,21 @@ export async function launchIndustry(id) {
     previousTime = performance.now(),
     previousUi = 0,
     previousHistory = -1;
-  text(
-    ".product-picker h2",
-    id === "parcels"
-      ? "Qual rota vamos atender?"
-      : id === "beverages"
-        ? "Qual bebida vamos produzir?"
-        : "Qual móvel vamos produzir?",
-  );
+  const stageFollower = createStageFollower({ environment: "beverages" });
+  let lastFollowStage = null;
+  const followToggle = installStageFollowToggle({
+    scopeControl: $("#scope"),
+    storageKey: "logistica.follow-stages.beverages",
+    onChange: () => {
+      lastFollowStage = null;
+      updateUi();
+    },
+  });
+  text(".product-picker h2", "Qual bebida vamos produzir?");
   $(".product-picker").setAttribute("aria-label", "Escolha do produto");
   text(".product-note", "Trocar o produto prepara um novo lote.");
-  $("#batch-size").max = "30";
+  $("#batch-size").max = String(definition.maxQuantity ?? 30);
+  $("#batch-size").value = String(definition.defaultQuantity ?? 12);
   const context = $(".header-context");
   context.lastChild.textContent = ` ${definition.name}`;
   const conditions = $("#guard").closest(".panel-section");
@@ -134,11 +153,25 @@ export async function launchIndustry(id) {
       (p) => (p.hidden = p.id !== `panel-${name}`),
     );
   }
+  function restoreLineView() {
+    const restored = session.returnLine();
+    if (restored) view?.setProduct(session.snapshot.product.id);
+    return restored;
+  }
   function selectEnvironment(value, reset = true) {
     if (!definition.steps.some((s) => s.id === value)) return;
     const changed = selected !== value;
     selected = value;
-    if (reset && changed) session.selectEnvironment(value);
+    if (reset && session.snapshot.scope !== "line")
+      session.enterBench(value, {
+        quantity: ["seal", "ship"].includes(value) ? 9 : 1,
+      });
+    else if (
+      session.snapshot.scope === "line" &&
+      session.snapshot.selected !== value
+    )
+      session.selectEnvironment(value);
+    $("#scope").value = session.snapshot.scope;
     $("#environment-select").value = value;
     const step = definition.steps.find((s) => s.id === value),
       index = definition.steps.indexOf(step);
@@ -167,7 +200,7 @@ export async function launchIndustry(id) {
       all(`[data-output-address="${key}"]`).forEach(
         (e) => (e.textContent = `Q${index}.${i}`),
       );
-    view?.select(value);
+    view?.select(value, session.snapshot.scope);
     all("[data-camera]").forEach((b) =>
       b.classList.toggle("active", b.dataset.camera === "front"),
     );
@@ -177,8 +210,10 @@ export async function launchIndustry(id) {
     `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
   function updateUi() {
     learning?.render();
+    ordersPanel?.render(session.snapshot);
     const s = session.snapshot,
       step = definition.steps.find((p) => p.id === selected);
+    followToggle.render(s.scope, s.practice);
     if (selected !== s.selected) {
       selectEnvironment(s.selected, false);
       return;
@@ -192,15 +227,19 @@ export async function launchIndustry(id) {
       ? "Emergência acionada"
       : !s.ready
         ? "Intertravamento ativo"
-        : s.phase === "complete"
-          ? "Lote concluído"
-          : s.fault
-            ? s.fault
-            : s.running
-              ? "Em operação"
-              : s.mode === "guided" && s.phase === "ready"
-                ? "Aguardando sua ação"
-                : "Pronto / pausado";
+        : s.fulfillment
+          ? `${s.fulfillment.action === "pick" ? "Separação" : "Expedição"} ${s.running ? "em operação" : "pausada"}`
+          : s.phase === "complete"
+            ? s.practice
+              ? "Teste concluído"
+              : "Caixas guardadas; aguardando pedido"
+            : s.fault
+              ? s.fault
+              : s.running
+                ? "Em operação"
+                : s.mode === "guided" && s.phase === "ready"
+                  ? "Aguardando sua ação"
+                  : "Pronto / pausado";
     const product = products.find((p) => p.id === s.product.id);
     text("#product-context", product.name);
     text(
@@ -214,24 +253,44 @@ export async function launchIndustry(id) {
       ),
     );
     text("#global-status", status);
-    text("#scene-state", status);
+    text(
+      "#scene-state",
+      s.practice ? `Teste independente · ${status}` : status,
+    );
     text("#simulation-clock", clock(s.elapsed));
+    const produced = s.pipeline ? s.lineDone : s.done;
     text(
       "#queue-count",
-      Math.max(0, s.total - s.done - (s.phase === "complete" ? 0 : 1)),
+      s.pipeline
+        ? Math.max(0, s.total - s.issued)
+        : Math.max(0, s.total - s.done - (s.phase === "complete" ? 0 : 1)),
     );
-    text("#wip-count", s.phase === "complete" ? 0 : 1);
-    text("#done-count", s.done);
-    text("#batch-progress", `${s.done} / ${s.total}`);
-    $("#batch-bar").style.width = `${(s.done / s.total) * 100}%`;
+    text(
+      "#wip-count",
+      s.pipeline ? s.inFlight : s.phase === "complete" ? 0 : 1,
+    );
+    text("#done-count", produced);
+    text("#batch-progress", `${produced} / ${s.total}`);
+    $("#batch-bar").style.width = `${(produced / s.total) * 100}%`;
     text(
       "#scope-status",
       s.scope === "bench" ? "Bancada individual" : "Linha integrada",
     );
-    $("#start").disabled = s.running || !s.ready || s.phase === "complete";
+    $("#start").disabled =
+      s.running ||
+      !s.ready ||
+      (s.phase === "complete" && !s.fulfillment && !s.practice);
     $("#pause").disabled = !s.running;
-    $("#step").disabled = s.running || !s.ready || s.phase === "complete";
-    text("#start span", retry ? "Repetir tampagem" : "Iniciar");
+    $("#step").disabled =
+      s.running || !s.ready || (s.phase === "complete" && !s.fulfillment);
+    text(
+      "#start span",
+      retry
+        ? "Repetir tampagem"
+        : s.practice && s.phase === "complete"
+          ? "Repetir etapa"
+          : "Iniciar",
+    );
     $("#run-indicator").className =
       s.emergency || !s.ready || s.fault ? "fault" : s.running ? "running" : "";
     $("#global-status-dot").className = $("#run-indicator").className;
@@ -256,20 +315,69 @@ export async function launchIndustry(id) {
     );
     $("#execute-action").disabled = $("#scene-action").disabled =
       !s.ready || s.phase !== "ready";
+    const order = `${definition.name} · ${s.bottleTotal} garrafas / ${Math.ceil(s.bottleTotal / 9)} caixas`;
+    if (context.lastChild.textContent !== ` ${order}`)
+      context.lastChild.textContent = ` ${order}`;
     const readings = definition.readings?.(s) ?? [];
     text("#action-help", s.fault || step.help);
     $("#action-progress").value = s.progress;
+    const feeding =
+      s.pipeline && s.hasMaterial === false
+        ? Object.values(s.stations)
+            .filter(
+              (station) =>
+                station.hasMaterial && station.stepIndex < s.stepIndex,
+            )
+            .at(-1)
+        : null;
+    const activeSource = feeding ?? s;
+    const upstream =
+      s.scope === "line" &&
+      (s.step.id !== selected || !!feeding) &&
+      !s.fulfillment &&
+      s.phase !== "complete";
+    const arriving = s.step.id === selected && s.phase === "moving";
     $("#receiving-feedback").hidden = !(
-      s.step.id === selected &&
-      s.phase === "operating" &&
-      ["scan", "weigh", "fill", "inspect"].includes(selected)
+      upstream ||
+      arriving ||
+      (s.step.id === selected &&
+        s.phase === "operating" &&
+        [
+          "receive",
+          "seal",
+          "scan",
+          "weigh",
+          "fill",
+          "inspect",
+          "wash",
+        ].includes(selected))
     );
-    text("#receiving-title", s.step.label);
+    text(
+      "#receiving-title",
+      upstream
+        ? `Aguardando alimentação · ${activeSource.step.label}`
+        : arriving
+          ? `Transporte para ${step.label}`
+          : s.step.label,
+    );
     text(
       "#receiving-detail",
-      readings.map((r) => `${r.label}: ${r.value}`).join(" · "),
+      upstream
+        ? `${activeSource.unit.id} está em ${activeSource.step.label}. ${
+            s.fault ||
+            (!s.running
+              ? s.phase === "ready" && s.mode !== "auto"
+                ? "Autorize a etapa atual para continuar."
+                : "Simulação pausada; inicie para continuar."
+              : "A linha avança após concluir esta operação.")
+          }`
+        : arriving
+          ? `${s.unit.id} está chegando pela esteira.`
+          : readings.map((r) => `${r.label}: ${r.value}`).join(" · "),
     );
-    $("#receiving-progress").value = s.progress;
+    $("#receiving-progress").value = upstream
+      ? activeSource.progress
+      : s.progress;
     text(
       "#mode-description",
       s.mode === "guided"
@@ -365,14 +473,22 @@ export async function launchIndustry(id) {
   all("[data-product]").forEach(
     (b) =>
       (b.onclick = () => {
-        session.setProduct(b.dataset.product);
+        if (session.setProduct(b.dataset.product) === false) {
+          ordersPanel?.notify(
+            "Conclua as peças em processo antes de trocar o produto. O estoque foi preservado.",
+            true,
+          );
+          return;
+        }
         view?.setProduct(b.dataset.product);
-        view?.select(selected);
+        view?.select(selected, session.snapshot.scope);
         previousHistory = -1;
         updateUi();
       }),
   );
   $("#start").onclick = () => {
+    if (session.snapshot.practice && session.snapshot.phase === "complete")
+      selectEnvironment(selected);
     session.start();
     if (session.snapshot.selected !== selected)
       selectEnvironment(session.snapshot.selected, false);
@@ -394,7 +510,14 @@ export async function launchIndustry(id) {
   };
   $("#speed").onchange = (e) => session.setSpeed(e.target.value);
   $("#scope").onchange = (e) => {
-    session.setScope(e.target.value);
+    if (e.target.value === "bench")
+      session.enterBench(selected, {
+        quantity: ["seal", "ship"].includes(selected) ? 9 : 1,
+      });
+    else if (session.snapshot.practice) restoreLineView();
+    else session.setScope("line");
+    selectEnvironment(session.snapshot.selected, false);
+    $("#scope").value = session.snapshot.scope;
     previousHistory = -1;
     updateUi();
   };
@@ -415,13 +538,21 @@ export async function launchIndustry(id) {
     updateUi();
   };
   $("#new-batch").onclick = () => {
-    $("#batch-size").value = session.snapshot.total;
+    $("#batch-size").value =
+      session.snapshot.bottleTotal ?? session.snapshot.total;
     $("#batch-dialog").showModal();
   };
   $("#cancel-batch").onclick = () => $("#batch-dialog").close();
   $("#batch-form").onsubmit = (e) => {
     e.preventDefault();
-    session.setQuantity($("#batch-size").value);
+    if (session.setQuantity($("#batch-size").value) === false) {
+      ordersPanel?.notify(
+        "Conclua as peças em processo antes de preparar outro lote.",
+        true,
+      );
+      $("#batch-dialog").close();
+      return;
+    }
     previousHistory = -1;
     $("#batch-dialog").close();
     updateUi();
@@ -480,10 +611,9 @@ export async function launchIndustry(id) {
         product: definition.products[0],
         build: {
           beverages: buildBeveragesModel,
-          furniture: buildFurnitureModel,
-          parcels: buildParcelsModel,
         }[id],
       },
+      { onDemand: true },
     );
   } catch (error) {
     console.error(error);
@@ -511,15 +641,31 @@ export async function launchIndustry(id) {
     onRefresh: updateUi,
     restoreSimulation(checkpoint, savedView) {
       if (!session.importState(checkpoint)) return false;
-      selected = savedView.selected;
+      selected = session.snapshot.practice
+        ? session.snapshot.selected
+        : savedView.selected;
       view?.setProduct(session.snapshot.product.id);
       selectEnvironment(selected, false);
       syncControls();
       return true;
     },
-    startMission(withFault) {
-      session.setScope("line");
-      session.setQuantity(12);
+    continueOrder() {
+      const extended = session.extendReceivingOrder(108);
+      if (extended) session.start();
+      return extended;
+    },
+    startMission(withFault, quantity = 108) {
+      if (session.snapshot.practice) restoreLineView();
+      if (
+        session.setScope("line") === false ||
+        session.setQuantity(quantity) === false
+      ) {
+        ordersPanel?.notify(
+          "O lote em andamento foi preservado. Conclua-o antes de iniciar outra missão.",
+          true,
+        );
+        return false;
+      }
       session.setMode("auto");
       session.setGuard(true);
       session.setObstruction(false);
@@ -531,23 +677,49 @@ export async function launchIndustry(id) {
         session.setSetting("volume", product.volume);
         session.setSetting("missingCap", withFault);
       }
-      if (id === "furniture") {
-        session.setSetting("cutLength", product.length - (withFault ? 10 : 0));
-        session.setSetting("drillDepth", 12);
-      }
-      if (id === "parcels") {
-        const unit = definition.initialize(product);
-        session.setSetting("destination", unit.destination);
-        session.setSetting("address", unit.expectedAddress);
-        session.setSetting("route", unit.destination);
-        session.setSetting("barcodeReadable", !withFault);
-      }
       session.selectEnvironment(definition.steps[0].id);
       selectEnvironment(definition.steps[0].id, false);
       syncControls();
     },
   });
   await learning.restore();
+  const restoredBench = session.snapshot;
+  const fullCaseReady =
+    restoredBench.practice &&
+    ["seal", "ship"].includes(selected) &&
+    restoredBench.bottleTotal !== 9 &&
+    restoredBench.phase === "ready" &&
+    restoredBench.progress === 0;
+  if (!restoredBench.practice || fullCaseReady)
+    session.enterBench(selected, {
+      quantity: ["seal", "ship"].includes(selected) ? 9 : 1,
+    });
+  selectEnvironment(session.snapshot.selected, false);
+  ordersPanel = installWarehouseOrders({
+    engine: session,
+    getState: () => session.snapshot,
+    products: definition.products,
+    onView: () => {
+      if (session.snapshot.practice) restoreLineView();
+      session.selectEnvironment("seal");
+      selectEnvironment("seal", false);
+    },
+    onRefresh: updateUi,
+    onPrepare: () => {
+      if (session.snapshot.practice) restoreLineView();
+      session.selectEnvironment(definition.steps[0].id);
+      selectEnvironment(definition.steps[0].id, false);
+      $("#new-batch").click();
+    },
+  });
+  $("#scope").value = session.snapshot.scope;
+  $("#batch-form p").textContent =
+    "O novo lote mantém as caixas e os pedidos já guardados. Peças em processo precisam terminar primeiro.";
+  text(
+    ".product-note",
+    "O estoque dos outros produtos e os pedidos são preservados.",
+  );
+  updateUi();
   function cleanup() {
     if (disposed) return;
     disposed = true;
@@ -558,16 +730,51 @@ export async function launchIndustry(id) {
   }
   document.addEventListener("industry:leave", cleanup, { once: true });
   window.addEventListener("pagehide", cleanup, { once: true });
+  let lastVisualState = "";
   function frame(now) {
     if (disposed) return;
     const dt = Math.min(0.1, Math.max(0, (now - previousTime) / 1000));
     previousTime = now;
     if (!document.hidden) {
       session.tick(dt);
-      const state = session.snapshot;
-      view?.update(state, dt, state.running, state.emergency, state.scope);
-      view?.updateOverview(state, dt);
-      view?.render();
+      let state = session.snapshot;
+      if (followToggle.enabled && state.scope === "line" && !state.practice) {
+        const nextStage = stageFollower.next(state);
+        if (nextStage && nextStage !== lastFollowStage) {
+          lastFollowStage = nextStage;
+          if (nextStage !== selected) {
+            selectEnvironment(nextStage, false);
+            state = session.snapshot;
+          }
+        }
+      } else lastFollowStage = null;
+      const visualState = JSON.stringify([
+        state.elapsed,
+        state.phase,
+        state.progress,
+        state.unit,
+        state.done,
+        state.selected,
+        state.scope,
+        state.product.id,
+        state.settings,
+        state.running,
+        state.emergency,
+        state.fault,
+        state.guard,
+        state.obstruction,
+        state.commands,
+        state.outputs,
+        state.inventory,
+        state.fulfillment,
+      ]);
+      const changed = visualState !== lastVisualState;
+      if (changed) {
+        view?.update(state, dt, state.running, state.emergency, state.scope);
+        view?.updateOverview(state, dt);
+        lastVisualState = visualState;
+      }
+      view?.render(changed);
       view?.hotspots().forEach((p, i) => {
         const label = $(`#hotspot-${i}`);
         label.style.left = `${p.x}%`;

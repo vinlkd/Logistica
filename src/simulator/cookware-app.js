@@ -1,10 +1,18 @@
+import {
+  createStageFollower,
+  installStageFollowToggle,
+} from "./stage-follow.js";
+import { installWarehouseOrders } from "./warehouse-orders-ui.js";
+import {
+  getOrderPickDuration,
+  getOrderShipDuration,
+} from "./warehouse-logistics.js";
 import { installLearningFeatures } from "./learning.js";
 import { receivingState } from "./receiving.js";
 import { PRODUCTS, getProduct, productIcon } from "./products.js";
 import "./style.css";
 import { ENVIRONMENTS, createSimulation, MATERIALS } from "./simulation.js";
 import { createLabScene } from "./lab-scene.js";
-
 import { labIcon as icon, renderLabShell } from "./lab-shell.js";
 const staticDemo = true;
 const root = document.querySelector("#app");
@@ -14,7 +22,6 @@ root.innerHTML = renderLabShell({
   productIcon,
   staticDemo,
 });
-
 const $ = (selector) => document.querySelector(selector);
 const panelToggle = document.createElement("button");
 panelToggle.id = "toggle-panel";
@@ -33,11 +40,17 @@ panelToggle.onclick = () => {
 };
 let selected = "receiving";
 const simulation = createSimulation(12, {
-  scope: "bench",
+  scope: "line",
+  onDemand: true,
+  fulfillmentDuration: (action, box, index) =>
+    action === "pick"
+      ? getOrderPickDuration(box, index)
+      : getOrderShipDuration(box, index),
   environment: selected,
   mode: "auto",
 });
-let learning = null;
+let learning = null,
+  ordersPanel = null;
 let view = null,
   lastTime = performance.now(),
   lastUi = 0,
@@ -45,6 +58,16 @@ let view = null,
   activeTab = "operation";
 const timeLabel = (time) =>
   `${String(Math.floor(time / 60)).padStart(2, "0")}:${String(Math.floor(time % 60)).padStart(2, "0")}`;
+const stageFollower = createStageFollower({ environment: "cookware" });
+let lastFollowStage = null;
+const followToggle = installStageFollowToggle({
+  scopeControl: $("#scope"),
+  storageKey: "logistica.follow-stages.cookware",
+  onChange: () => {
+    lastFollowStage = null;
+    updateUi();
+  },
+});
 function text(selector, value) {
   const element = $(selector);
   if (element && element.textContent !== String(value))
@@ -61,16 +84,24 @@ function tab(name) {
   for (const panel of document.querySelectorAll(".inspector-panel"))
     panel.hidden = panel.id !== `panel-${name}`;
 }
-function selectEnvironment(id) {
+function restoreLineView() {
+  const restored = simulation.returnLine();
+  if (restored) view?.setProduct(simulation.snapshot.product);
+  return restored;
+}
+function selectEnvironment(id, practice = false) {
   if (!ENVIRONMENTS.some((e) => e.id === id)) return;
   const changed = selected !== id;
   selected = id;
+  if (practice && simulation.snapshot.scope !== "line")
+    simulation.enterBench(id, { quantity: 1 });
   const state = simulation.snapshot;
-  if (changed && state.scope === "bench") simulation.setScope("bench", id);
+  if (!practice && changed && state.scope === "bench" && !state.practice)
+    simulation.setScope("bench", id);
+  $("#scope").value = state.scope;
   const environment = ENVIRONMENTS.find((e) => e.id === id),
     index = ENVIRONMENTS.indexOf(environment);
   $("#environment-select").value = id;
-
   text("#input-material", MATERIALS[environment.input]);
   text("#output-material", MATERIALS[environment.output]);
   text("#environment-number", `${String(index + 1).padStart(2, "0")} / 08`);
@@ -100,7 +131,7 @@ function selectEnvironment(id) {
       `[data-output-address="${key}"]`,
     ))
       element.textContent = `Q${index}.${i}`;
-  view?.select(id);
+  view?.select(id, simulation.snapshot.scope);
   for (const button of document.querySelectorAll("[data-camera]"))
     button.classList.toggle("active", button.dataset.camera === "front");
   lastEvent = -1;
@@ -110,8 +141,10 @@ function updateUi() {
   learning?.render();
   const state = simulation.snapshot,
     cell = state.cells.find((c) => c.id === selected);
+  followToggle.render(state.scope, state.practice);
   const environment = ENVIRONMENTS.find((e) => e.id === selected);
   const product = getProduct(state.product);
+  ordersPanel?.render(state);
   text("#product-context", `${product.name} · ${product.size}`);
   text("#product-description", product.description);
   for (const b of document.querySelectorAll("[data-product]"))
@@ -192,7 +225,14 @@ function updateUi() {
             ? "Em operação"
             : "Pronto / pausado";
   text("#global-status", status);
-  text("#scene-state", state.running ? cell.status : status);
+  text(
+    "#scene-state",
+    state.practice
+      ? `Teste independente · ${state.running ? cell.status : status}`
+      : state.running
+        ? cell.status
+        : status,
+  );
   text("#simulation-clock", timeLabel(state.time));
   text("#queue-count", cell.queue);
   text("#wip-count", cell.part ? 1 : 0);
@@ -200,10 +240,18 @@ function updateUi() {
   text("#batch-progress", `${state.done} / ${state.batch}`);
   $("#batch-bar").style.width = `${(state.done / state.batch) * 100}%`;
   $("#start").disabled =
-    state.running || !state.ready || state.done >= state.batch;
+    state.running ||
+    !state.ready ||
+    (state.done >= state.batch && !state.fulfillment && !state.practice);
+  text(
+    "#start span",
+    state.practice && state.done >= state.batch ? "Repetir etapa" : "Iniciar",
+  );
   $("#pause").disabled = !state.running;
   $("#step").disabled =
-    state.running || !state.ready || state.done >= state.batch;
+    state.running ||
+    !state.ready ||
+    (state.done >= state.batch && !state.fulfillment);
   $("#run-indicator").className =
     state.emergency || !state.ready ? "fault" : state.running ? "running" : "";
   $("#global-status-dot").className = $("#run-indicator").className;
@@ -297,7 +345,13 @@ function updateUi() {
 }
 for (const button of document.querySelectorAll("[data-product]"))
   button.onclick = () => {
-    simulation.setProduct(button.dataset.product);
+    if (simulation.setProduct(button.dataset.product) === false) {
+      ordersPanel?.notify(
+        "Conclua as peças em processo antes de trocar o produto. O estoque guardado foi preservado.",
+        true,
+      );
+      return;
+    }
     view?.setProduct(button.dataset.product);
     lastEvent = -1;
     updateUi();
@@ -306,7 +360,7 @@ const logoutButton = $("#logout");
 if (logoutButton)
   logoutButton.onclick = () => document.dispatchEvent(new Event("auth:logout"));
 for (const button of document.querySelectorAll("[data-environment]"))
-  button.onclick = () => selectEnvironment(button.dataset.environment);
+  button.onclick = () => selectEnvironment(button.dataset.environment, true);
 for (const button of document.querySelectorAll("[data-tab]"))
   button.onclick = () => tab(button.dataset.tab);
 for (const button of document.querySelectorAll("[data-mode]"))
@@ -330,12 +384,23 @@ for (const button of document.querySelectorAll("[data-camera]"))
     for (const other of document.querySelectorAll("[data-camera]"))
       other.classList.toggle("active", other === button);
   };
-$("#environment-select").onchange = (e) => selectEnvironment(e.target.value);
+$("#environment-select").onchange = (e) =>
+  selectEnvironment(e.target.value, true);
 $("#execute-action").onclick = $("#scene-action").onclick = () => {
   simulation.performNext(selected);
   updateUi();
 };
 $("#start").onclick = () => {
+  if (
+    simulation.snapshot.practice &&
+    simulation.snapshot.done >= simulation.snapshot.batch
+  )
+    selectEnvironment(selected, true);
+  if (simulation.snapshot.fulfillment) {
+    simulation.start();
+    updateUi();
+    return;
+  }
   simulation.snapshot.cells.find((c) => c.id === selected).mode === "guided"
     ? simulation.performNext(selected)
     : simulation.start();
@@ -353,7 +418,15 @@ $("#speed").onchange = (e) => {
   simulation.setSpeed(Number(e.target.value));
 };
 $("#scope").onchange = (e) => {
-  simulation.setScope(e.target.value, selected);
+  if (e.target.value === "bench")
+    simulation.enterBench(selected, { quantity: 1 });
+  else if (simulation.snapshot.practice) restoreLineView();
+  else simulation.setScope("line", selected);
+  selected =
+    simulation.snapshot.scope === "bench"
+      ? simulation.snapshot.focus
+      : selected;
+  selectEnvironment(selected);
   lastEvent = -1;
   updateUi();
 };
@@ -380,7 +453,14 @@ $("#new-batch").onclick = () => {
 $("#cancel-batch").onclick = () => $("#batch-dialog").close();
 $("#batch-form").onsubmit = (e) => {
   e.preventDefault();
-  simulation.reset(Number($("#batch-size").value));
+  if (simulation.reset(Number($("#batch-size").value)) === false) {
+    ordersPanel?.notify(
+      "Conclua as peças em processo antes de preparar outro lote.",
+      true,
+    );
+    $("#batch-dialog").close();
+    return;
+  }
   lastEvent = -1;
   $("#batch-dialog").close();
   updateUi();
@@ -427,6 +507,8 @@ try {
       simulation.haltMotion(id, reason);
       updateUi();
     },
+    null,
+    { onDemand: true },
   );
 } catch (error) {
   console.error(error);
@@ -440,7 +522,7 @@ learning = installLearningFeatures({
   exportSimulation: () => simulation.exportState(),
   getView: () => view,
   getSelected: () => selected,
-  onSelect: selectEnvironment,
+  onSelect: (id) => selectEnvironment(id, true),
   onRefresh: updateUi,
   restoreSimulation(checkpoint, savedView) {
     if (!simulation.importState(checkpoint)) return false;
@@ -453,8 +535,17 @@ learning = installLearningFeatures({
     return true;
   },
   startMission(withFault) {
-    simulation.setScope("line", "receiving");
-    simulation.reset(12);
+    if (simulation.snapshot.practice) restoreLineView();
+    if (
+      simulation.setScope("line", "receiving") === false ||
+      simulation.reset(12) === false
+    ) {
+      ordersPanel?.notify(
+        "O lote em andamento foi preservado. Conclua-o antes de iniciar outra missão.",
+        true,
+      );
+      return false;
+    }
     for (const environment of ENVIRONMENTS) {
       simulation.setMode(environment.id, "auto");
       simulation.setGuard(environment.id, true);
@@ -468,8 +559,34 @@ learning = installLearningFeatures({
   },
 });
 await learning.restore();
+if (!simulation.snapshot.practice)
+  simulation.enterBench(selected, { quantity: 1 });
+selected = simulation.snapshot.focus;
+selectEnvironment(selected);
+ordersPanel = installWarehouseOrders({
+  engine: simulation,
+  getState: () => simulation.snapshot,
+  products: PRODUCTS,
+  onView: () => {
+    if (simulation.snapshot.practice) restoreLineView();
+    selectEnvironment("finished");
+  },
+  onRefresh: updateUi,
+  onPrepare: () => {
+    if (simulation.snapshot.practice) restoreLineView();
+    selectEnvironment("receiving");
+    $("#new-batch").click();
+  },
+});
+$("#scope").value = simulation.snapshot.scope;
+$("#batch-form p").textContent =
+  "O novo lote mantém as caixas e os pedidos já guardados. Peças em processo precisam terminar primeiro.";
+$(".product-note").textContent =
+  "O estoque dos outros modelos e os pedidos são preservados.";
+updateUi();
 let frameId = 0,
   leavingIndustry = false;
+let lastVisualState = "";
 function frame(now) {
   if (leavingIndustry) return;
   const dt = Math.min(Math.max((now - lastTime) / 1000, 0), 0.1);
@@ -477,15 +594,47 @@ function frame(now) {
   if (!document.hidden) {
     simulation.step(dt);
     const state = simulation.snapshot;
-    view?.update(
-      state.cells.find((c) => c.id === selected),
-      dt,
+    if (followToggle.enabled && state.scope === "line" && !state.practice) {
+      const nextStage = stageFollower.next(state);
+      if (nextStage && nextStage !== lastFollowStage) {
+        lastFollowStage = nextStage;
+        if (nextStage !== selected) selectEnvironment(nextStage);
+      }
+    } else lastFollowStage = null;
+    const visualState = JSON.stringify([
+      state.time,
       state.running,
       state.emergency,
+      state.product,
+      selected,
       state.scope,
-    );
-    view?.updateOverview(state, dt);
-    view?.render();
+      state.inventory,
+      state.fulfillment,
+      state.cells.map((c) => [
+        c.unit,
+        c.phase,
+        c.progress,
+        c.stage,
+        c.outputs,
+        c.guard,
+        c.fault,
+      ]),
+    ]);
+    const changed = visualState !== lastVisualState;
+    if (changed) {
+      view?.update(
+        view?.isOrderWarehouse
+          ? state
+          : state.cells.find((c) => c.id === selected),
+        dt,
+        state.running,
+        state.emergency,
+        state.scope,
+      );
+      view?.updateOverview(state, dt);
+      lastVisualState = visualState;
+    }
+    view?.render(changed);
     if (view) {
       for (const [i, p] of view.hotspots().entries()) {
         const label = $(`#hotspot-${i}`);
@@ -519,7 +668,6 @@ document.addEventListener("visibilitychange", () => {
   lastTime = performance.now();
 });
 frameId = requestAnimationFrame(frame);
-
 function closeCookwareScene() {
   leavingIndustry = true;
   learning?.close();

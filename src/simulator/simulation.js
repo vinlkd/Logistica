@@ -1,5 +1,12 @@
+import { cookwareReceivingDuration } from "./cookware-receiving-flow.js";
+import {
+  cookwarePackingCartonDuration,
+  cookwarePackingFeedDuration,
+  cookwarePackingUnloadDuration,
+} from "./cookware-packing.js";
 import { safeData, numberIn, integerIn } from "./state-validation.js";
 import { getProduct } from "./products.js";
+import { createWarehouseInventory } from "./inventory-orders.js";
 export const MATERIALS = {
   disc: "Disco de inox",
   "checked-disc": "Disco conferido",
@@ -54,8 +61,8 @@ export const ENVIRONMENTS = [
   },
   {
     id: "raw",
-    name: "Mat\u00e9ria-prima",
-    short: "Mat\u00e9ria-prima",
+    name: "Armazém de matéria-prima",
+    short: "Armazém MP",
     machine: "Estoque e retirada de discos",
     input: "checked-disc",
     output: "sorted-disc",
@@ -216,9 +223,9 @@ export const ENVIRONMENTS = [
     recipe: [
       step(
         "carton",
-        "Montar caixa",
-        1.2,
-        "As laterais de papelão se levantam ao redor da panela.",
+        "Montar caixa e inserir panela",
+        9,
+        "A caixa é montada na bancada; a pinça retira a panela da esteira e a acomoda por cima, dentro da caixa.",
       ),
       step(
         "protect",
@@ -243,12 +250,13 @@ export const ENVIRONMENTS = [
   },
   {
     id: "finished",
-    name: "Produtos acabados",
-    short: "Estoque final",
+    name: "Armazém de produtos acabados",
+    short: "Armazém final",
     machine: "Armazenagem e separação do pedido",
     input: "boxed-pot",
     output: "picked-box",
-    description: "A caixa é endereçada e separada para compor o pedido.",
+    description:
+      "A caixa real ocupa seu endereço no armazém e é retirada para a expedição.",
     exercise:
       "Observe a caixa subir com o elevador e retornar à posição de saída.",
     recipe: [
@@ -261,25 +269,25 @@ export const ENVIRONMENTS = [
       step(
         "raise",
         "Armazenar",
-        1.3,
+        4.5,
         "O elevador posiciona a caixa na altura de armazenagem.",
       ),
       step(
         "store",
         "Guardar caixa",
-        1.8,
+        5,
         "Os garfos depositam a caixa no endereço reservado e recuam.",
       ),
       step(
         "retrieve",
         "Atender pedido",
-        1.8,
+        5,
         "Os garfos recolhem a caixa para o pedido de expedição.",
       ),
       step(
         "lower",
         "Separar pedido",
-        1.3,
+        4.5,
         "A caixa retorna ao nível da linha para atender ao pedido.",
         "picked-box",
       ),
@@ -349,6 +357,71 @@ export function createSimulation(initialBatch = 12, options = {}) {
     events = [],
     completedUnits = [],
     product = getProduct(options.product).id;
+  let onDemand = options.onDemand === true;
+  const demandEnvironments = ENVIRONMENTS.map((environment) =>
+    environment.id === "finished"
+      ? {
+          ...environment,
+          recipe: environment.recipe.map((step, index) => ({
+            ...step,
+            duration: [0.7, 8, 7, 0.6, 8][index],
+            ...(step.id === "retrieve"
+              ? {
+                  label: "Registrar estoque",
+                  explanation:
+                    "A caixa permanece apoiada no endereço aguardando pedido.",
+                }
+              : step.id === "lower"
+                ? {
+                    label: "Retornar garfos vazios",
+                    explanation:
+                      "O carro retorna vazio para receber outra caixa.",
+                  }
+                : {}),
+          })),
+          cycle: 24.3,
+        }
+      : environment,
+  );
+  const cellEnvironment = (index, demand = onDemand, productId = product) => {
+    const environment = (demand ? demandEnvironments : ENVIRONMENTS)[index];
+    if (environment.id !== "packing") return environment;
+    const recipe = environment.recipe.map((step) =>
+      step.id === "carton"
+        ? {
+            ...step,
+            duration: cookwarePackingCartonDuration(getProduct(productId)),
+          }
+        : step,
+    );
+    return {
+      ...environment,
+      recipe,
+      cycle: recipe.reduce((sum, step) => sum + step.duration, 0),
+    };
+  };
+  const inventory = createWarehouseInventory({
+    environment: "cookware",
+    accountKey: options.accountKey,
+    capacity: options.capacity,
+    products: ["saucepan", "casserole", "frying-pan"],
+  });
+  let lotId = inventory.snapshot.lotId;
+  let fulfillment = null;
+  let practice = false,
+    lineCheckpoint = null;
+  const shippingPending = () => !!fulfillment;
+  const workInProgress = () =>
+    cells.some(
+      (c, i) =>
+        i < 7 &&
+        (c.unit ||
+          (i !==
+            (scope === "bench"
+              ? ENVIRONMENTS.findIndex((e) => e.id === focus)
+              : 0) &&
+            c.stock.length)),
+    );
   const log = (message, type = "info", id = null) => {
     events.unshift({ id: ++eventId, time, message, type, environment: id });
     events = events.slice(0, 120);
@@ -373,12 +446,15 @@ export function createSimulation(initialBatch = 12, options = {}) {
     }));
     const i =
       scope === "bench" ? ENVIRONMENTS.findIndex((e) => e.id === focus) : 0;
-    cells[i].stock = Array.from({ length: batch }, (_, n) => ({
-      id: `UT-${String(n + 1).padStart(3, "0")}`,
-      material: ENVIRONMENTS[i].input,
-      product,
-      history: [],
-    }));
+    cells[i].stock =
+      onDemand && i === 7
+        ? []
+        : Array.from({ length: batch }, (_, n) => ({
+            id: `UT-${String(n + 1).padStart(3, "0")}`,
+            material: ENVIRONMENTS[i].input,
+            product,
+            history: [],
+          }));
     completedUnits = [];
   }
   const getCell = (id) => {
@@ -386,7 +462,8 @@ export function createSimulation(initialBatch = 12, options = {}) {
     if (!c) throw new Error("Ambiente desconhecido");
     return c;
   };
-  const terminal = () => (scope === "bench" ? getCell(focus) : cells.at(-1)),
+  const terminal = () =>
+      scope === "bench" ? getCell(focus) : cells[onDemand ? 6 : 7],
     safe = () => !emergency && cells.every((c) => c.guard && !c.fault);
   const actionId = (c) =>
     c.phase === "idle" || c.phase === "feeding"
@@ -395,7 +472,7 @@ export function createSimulation(initialBatch = 12, options = {}) {
         ? "transfer"
         : getProcessStep(
             c,
-            ENVIRONMENTS.find((e) => e.id === c.id),
+            cellEnvironment(ENVIRONMENTS.findIndex((e) => e.id === c.id)),
           )?.id;
   function outputs(c) {
     const enabled = running && !emergency && c.guard && !c.fault;
@@ -425,8 +502,16 @@ export function createSimulation(initialBatch = 12, options = {}) {
   function reset(nextBatch = batch) {
     if (!Number.isInteger(nextBatch) || nextBatch < 1 || nextBatch > 50)
       throw new Error("Lote: entre 1 e 50 unidades.");
+    if (onDemand && workInProgress()) {
+      log(
+        "Conclua as peças em processo antes de preparar outro lote.",
+        "warning",
+      );
+      return false;
+    }
+    if (onDemand) lotId = inventory.beginLot();
     batch = nextBatch;
-    time = 0;
+    if (!onDemand) time = 0;
     running = false;
     emergency = false;
     events = [];
@@ -435,6 +520,7 @@ export function createSimulation(initialBatch = 12, options = {}) {
     log(
       `Lote preparado: ${batch} panelas. ${scope === "bench" ? "Bancada individual." : "Fluxo integrado."}`,
     );
+    return true;
   }
   createCells();
   log("Lote preparado. Inicie para acompanhar a transformação da unidade.");
@@ -443,7 +529,7 @@ export function createSimulation(initialBatch = 12, options = {}) {
       log("Confira emergência, proteções e obstruções.", "warning");
       return false;
     }
-    if (terminal().done >= batch) {
+    if (terminal().done >= batch && !(onDemand && shippingPending())) {
       log("Lote concluído. Prepare um novo lote.");
       return false;
     }
@@ -471,15 +557,22 @@ export function createSimulation(initialBatch = 12, options = {}) {
       time += delta;
       for (let i = cells.length - 1; i >= 0; i--) {
         const c = cells[i],
-          e = ENVIRONMENTS[i];
+          e = cellEnvironment(i);
+        if (onDemand && fulfillment && i === 6 && !c.unit) continue;
         if (
           !c.unit &&
           c.stock.length &&
+          (!onDemand ||
+            (c.id !== "shipping" &&
+              inventory.canReceiveBox() &&
+              (i === 0 || !cells[i].unit))) &&
           (c.mode === "auto" ||
             (c.mode === "guided" && c.permit === actionId(c)) ||
             c.commands.motor)
         ) {
           c.unit = c.stock.shift();
+          if (onDemand && c.id === "finished")
+            c.unit.warehouseAddress = inventory.getFreeAddress();
           c.lastUnitId = c.unit.id;
           c.phase = "feeding";
           c.progress = 0;
@@ -496,7 +589,19 @@ export function createSimulation(initialBatch = 12, options = {}) {
         if (c.phase === "feeding" && out.motor) {
           c.progress = Math.min(
             0.5,
-            c.progress + delta * (c.id === "raw" ? 0.12 : 0.24),
+            c.progress +
+              delta *
+                (c.id === "receiving"
+                  ? 0.5 /
+                    cookwareReceivingDuration(
+                      c.done,
+                      c.done + c.stock.length + (c.unit ? 1 : 0),
+                    )
+                  : c.id === "raw"
+                    ? 0.12
+                    : c.id === "packing"
+                      ? 0.5 / cookwarePackingFeedDuration()
+                      : 0.24),
           );
           if (c.progress >= 0.5) {
             c.phase = "processing";
@@ -548,11 +653,65 @@ export function createSimulation(initialBatch = 12, options = {}) {
           }
         } else if (c.phase === "unloading") {
           if (c.progress < 0.9 && out.motor)
-            c.progress = Math.min(0.9, c.progress + delta * 0.24);
+            c.progress = Math.min(
+              0.9,
+              c.progress +
+                delta *
+                  (c.id === "packing"
+                    ? 0.5 / cookwarePackingUnloadDuration()
+                    : 0.24),
+            );
           else if (c.progress >= 0.9 && out.transfer) {
-            c.progress = Math.min(1, c.progress + delta * 0.2);
+            if (
+              onDemand &&
+              scope === "line" &&
+              i < 6 &&
+              cells[i + 1].stock.length >= 1
+            )
+              continue;
+            c.progress = Math.min(
+              1,
+              c.progress +
+                delta *
+                  (c.id === "packing"
+                    ? 0.5 / cookwarePackingUnloadDuration()
+                    : 0.2),
+            );
             if (c.progress >= 1) {
               const unit = c.unit;
+              if (onDemand && scope === "line" && c.id === "finished") {
+                if (
+                  !unit.history.some(
+                    (h) => h.environment === "production" && h.step === "draw",
+                  ) ||
+                  !unit.history.some(
+                    (h) => h.environment === "packing" && h.step === "label",
+                  )
+                ) {
+                  running = false;
+                  c.fault = true;
+                  log(
+                    "Caixa sem histórico de produção e embalagem: entrada no estoque bloqueada.",
+                    "error",
+                    c.id,
+                  );
+                  continue;
+                }
+                const stored = inventory.receiveBox({
+                  id: unit.id,
+                  product: unit.product,
+                  quantity: 1,
+                  unit: { ...unit, material: "boxed-pot" },
+                  address: unit.warehouseAddress,
+                  lotId,
+                });
+                if (!stored.ok) {
+                  c.progress = 1;
+                  continue;
+                }
+                unit.inventoryId = stored.box.id;
+                unit.material = "boxed-pot";
+              }
               c.done++;
               c.permit = null;
               c.unit = null;
@@ -560,9 +719,10 @@ export function createSimulation(initialBatch = 12, options = {}) {
               c.progress = 0;
               c.processing = 0;
               c.commands.transfer = false;
-              if (scope === "line" && i < cells.length - 1)
+              if (scope === "line" && i < (onDemand ? 6 : cells.length - 1))
                 cells[i + 1].stock.push(unit);
-              else completedUnits.push(unit);
+              else if (!onDemand || c.id !== "shipping")
+                completedUnits.push(unit);
               log(
                 `${unit.id} · ${e.short}: transferência concluída.`,
                 "success",
@@ -572,12 +732,52 @@ export function createSimulation(initialBatch = 12, options = {}) {
           }
         }
       }
-      if (terminal().done >= batch) {
+      if (onDemand && fulfillment && !cells[6].unit) {
+        const box = inventory.getBox(fulfillment.boxIds[fulfillment.index]);
+        const duration =
+          options.fulfillmentDuration?.(
+            fulfillment.action,
+            box,
+            fulfillment.index,
+          ) ?? 8;
+        if (!Number.isFinite(duration) || duration <= 0) {
+          running = false;
+          log("Trajeto de separação inválido.", "error");
+          break;
+        }
+        fulfillment.progress = Math.min(
+          1,
+          fulfillment.progress + delta / duration,
+        );
+        if (fulfillment.progress >= 1 - 1e-9) {
+          const result =
+            fulfillment.action === "pick"
+              ? inventory.completePickBox(fulfillment.orderId, box.id)
+              : inventory.completeShipmentBox(fulfillment.orderId, box.id);
+          if (!result.ok) {
+            running = false;
+            log(result.message, "error");
+            break;
+          }
+          fulfillment.index++;
+          fulfillment.progress = 0;
+          if (fulfillment.index === fulfillment.boxIds.length) {
+            log(
+              `${fulfillment.orderId}: ${fulfillment.action === "pick" ? "separação" : "expedição"} concluída.`,
+              "success",
+            );
+            fulfillment = null;
+          }
+        }
+      }
+      if (terminal().done >= batch && !(onDemand && shippingPending())) {
         running = false;
         log(
           scope === "bench"
             ? "Lote da bancada concluído."
-            : "Pedido concluído: todas as panelas embaladas e expedidas.",
+            : onDemand
+              ? "Produção concluída. As caixas permanecem no armazém aguardando pedido."
+              : "Pedido concluído: todas as panelas embaladas e expedidas.",
           "success",
         );
         break;
@@ -589,6 +789,7 @@ export function createSimulation(initialBatch = 12, options = {}) {
     return structuredClone({
       version: 1,
       environment: "cookware",
+      packingLayoutVersion: 2,
       product,
       batch,
       time,
@@ -601,6 +802,15 @@ export function createSimulation(initialBatch = 12, options = {}) {
       cells,
       events,
       completedUnits,
+      ...(onDemand
+        ? {
+            onDemand: true,
+            inventory: inventory.exportState(),
+            lotId,
+            fulfillment,
+          }
+        : {}),
+      ...(practice ? { practice: true, lineCheckpoint } : {}),
     });
   }
   function importState(value) {
@@ -612,7 +822,7 @@ export function createSimulation(initialBatch = 12, options = {}) {
         getProduct(value.product).id !== value.product ||
         !integerIn(value.batch, 1, 50) ||
         !numberIn(value.time, 0, 1e8) ||
-        ![0.5, 1, 2, 4].includes(value.speed) ||
+        ![0.5, 1, 2, 4, 8].includes(value.speed) ||
         typeof value.emergency !== "boolean" ||
         !["bench", "line"].includes(value.scope) ||
         !ENVIRONMENTS.some((e) => e.id === value.focus) ||
@@ -626,6 +836,106 @@ export function createSimulation(initialBatch = 12, options = {}) {
         return false;
       const next = structuredClone(value),
         seen = new Set();
+      if (next.packingLayoutVersion !== 2) {
+        const packing = next.cells.find((cell) => cell.id === "packing");
+        const old = [1.2, 0.9, 1.2, 1.1],
+          updated = [
+            cookwarePackingCartonDuration(getProduct(next.product)),
+            0.9,
+            1.2,
+            1.1,
+          ];
+        if (
+          packing &&
+          numberIn(
+            packing.processing,
+            0,
+            old.reduce((a, b) => a + b, 0) + 0.00001,
+          )
+        ) {
+          let before = 0,
+            after = 0;
+          for (let index = 0; index < old.length; index++) {
+            if (packing.processing <= before + old[index] + 1e-7) {
+              packing.processing =
+                after +
+                updated[index] *
+                  Math.min(
+                    1,
+                    Math.max(0, (packing.processing - before) / old[index]),
+                  );
+              break;
+            }
+            before += old[index];
+            after += updated[index];
+          }
+        }
+      }
+      const storedMode = next.onDemand === true;
+      if (next.practice !== undefined && typeof next.practice !== "boolean")
+        return false;
+      if (next.practice) {
+        if (
+          next.scope !== "bench" ||
+          storedMode ||
+          !next.lineCheckpoint ||
+          next.lineCheckpoint.practice ||
+          Object.hasOwn(next.lineCheckpoint, "lineCheckpoint")
+        )
+          return false;
+        const pausedLine = createSimulation(1, options);
+        if (!pausedLine.importState(next.lineCheckpoint)) return false;
+      }
+      const candidateInventory = createWarehouseInventory({
+        environment: "cookware",
+        accountKey: options.accountKey,
+        capacity: options.capacity,
+        products: ["saucepan", "casserole", "frying-pan"],
+      });
+      if (
+        storedMode &&
+        (!candidateInventory.importState(next.inventory) ||
+          next.lotId !== candidateInventory.snapshot.lotId)
+      )
+        return false;
+      if (
+        !storedMode &&
+        options.onDemand === true &&
+        !next.practice &&
+        (next.cells[7].stock.length ||
+          next.cells[7].unit ||
+          inventory.snapshot.boxes.length)
+      )
+        return false;
+      if (storedMode) {
+        const task = next.fulfillment,
+          active = candidateInventory.snapshot.boxes.filter((b) =>
+            ["picking", "shipping"].includes(b.status),
+          );
+        if (task !== null) {
+          const order = candidateInventory.snapshot.orders.find(
+            (o) => o.id === task?.orderId,
+          );
+          if (
+            !order ||
+            !["pick", "ship"].includes(task.action) ||
+            order.status !==
+              (task.action === "pick" ? "picking" : "shipping") ||
+            JSON.stringify(task.boxIds) !== JSON.stringify(order.boxIds) ||
+            !integerIn(task.index, 0, task.boxIds.length - 1) ||
+            !numberIn(task.progress, 0, 1)
+          )
+            return false;
+          const pending = task.boxIds.slice(task.index);
+          if (
+            active.length !== pending.length ||
+            !active.every(
+              (b) => b.orderId === order.id && pending.includes(b.id),
+            )
+          )
+            return false;
+        } else if (active.length) return false;
+      }
       function validUnit(unit) {
         if (
           !unit ||
@@ -648,7 +958,7 @@ export function createSimulation(initialBatch = 12, options = {}) {
         );
       }
       for (const [i, cell] of next.cells.entries()) {
-        const e = ENVIRONMENTS[i];
+        const e = cellEnvironment(i, storedMode, next.product);
         if (
           cell.id !== e.id ||
           !["auto", "guided", "manual"].includes(cell.mode) ||
@@ -687,15 +997,34 @@ export function createSimulation(initialBatch = 12, options = {}) {
         cell.commands = { motor: false, work: false, transfer: false };
       }
       if (!next.completedUnits.every(validUnit) || seen.size !== next.batch)
+        if (
+          !(
+            storedMode &&
+            next.scope === "bench" &&
+            next.focus === "shipping" &&
+            seen.size === 0 &&
+            next.completedUnits.length === 0
+          )
+        )
+          return false;
+      if (
+        storedMode &&
+        (next.cells[7].stock.length || next.cells[7].unit || next.cells[7].done)
+      )
         return false;
       const terminalIndex =
         next.scope === "line"
-          ? 7
+          ? storedMode
+            ? 6
+            : 7
           : ENVIRONMENTS.findIndex((e) => e.id === next.focus);
-      if (next.cells[terminalIndex].done !== next.completedUnits.length)
+      if (
+        !(storedMode && terminalIndex === 7) &&
+        next.cells[terminalIndex].done !== next.completedUnits.length
+      )
         return false;
       if (next.scope === "line")
-        for (let i = 0; i < 7; i++) {
+        for (let i = 0; i < (storedMode ? 6 : 7); i++) {
           const following = next.cells[i + 1];
           if (
             next.cells[i].done !==
@@ -705,7 +1034,10 @@ export function createSimulation(initialBatch = 12, options = {}) {
         }
       else if (
         next.cells.some(
-          (c, i) => i !== terminalIndex && (c.done || c.unit || c.stock.length),
+          (c, i) =>
+            i !== terminalIndex &&
+            !(storedMode && i === 7) &&
+            (c.done || c.unit || c.stock.length),
         )
       )
         return false;
@@ -727,15 +1059,136 @@ export function createSimulation(initialBatch = 12, options = {}) {
       scope = next.scope;
       focus = next.focus;
       cells = next.cells;
+      if (!storedMode && options.onDemand === true && !next.practice)
+        Object.assign(cells[7], {
+          stock: [],
+          unit: null,
+          lastUnitId: null,
+          phase: "idle",
+          progress: 0,
+          processing: 0,
+          done: 0,
+          committed: 0,
+          lastStage: -1,
+          permit: null,
+          commands: { motor: false, work: false, transfer: false },
+        });
       events = next.events;
       completedUnits = next.completedUnits;
+      if (storedMode) {
+        inventory.importState(next.inventory);
+        lotId = next.lotId;
+        fulfillment = next.fulfillment;
+      }
+      onDemand = next.practice
+        ? false
+        : storedMode || options.onDemand === true;
+      practice = next.practice === true;
+      lineCheckpoint = practice ? structuredClone(next.lineCheckpoint) : null;
+      if (practice) fulfillment = null;
       running = false;
       return true;
     } catch {
       return false;
     }
   }
+  function enterBench(id, { quantity = 1 } = {}) {
+    if (
+      !ENVIRONMENTS.some((environment) => environment.id === id) ||
+      !integerIn(quantity, 1, 50)
+    )
+      return false;
+    if (!practice) {
+      stop();
+      lineCheckpoint = exportState();
+    }
+    practice = true;
+    onDemand = false;
+    fulfillment = null;
+    scope = "bench";
+    focus = id;
+    reset(quantity);
+    cells.forEach((cell) => (cell.mode = "auto"));
+    return true;
+  }
+  function returnLine() {
+    if (!practice || !lineCheckpoint) return false;
+    return importState(structuredClone(lineCheckpoint));
+  }
+  const practiceBlocked = () => ({
+    ok: false,
+    code: "PRACTICE_MODE",
+    message:
+      "O teste de bancada não altera o estoque real. Volte à linha para atender pedidos.",
+  });
   return {
+    enterBench,
+    returnLine,
+    resumeLine: returnLine,
+    generateOrder: (args) =>
+      practice
+        ? practiceBlocked()
+        : inventory.generateOrder({ ...args, maxBoxes: 3 }),
+    reserveOrder: (id) =>
+      practice ? practiceBlocked() : inventory.reserveOrder(id),
+    pickOrder(id, ids) {
+      if (!onDemand || !safe() || fulfillment)
+        return {
+          ok: false,
+          code: "BUSY",
+          message:
+            "Conclua ou retome o movimento atual antes de separar outro pedido.",
+        };
+      if (
+        inventory.snapshot.orders.some(
+          (order) =>
+            order.id !== id &&
+            ["picking", "picked", "checked", "shipping"].includes(order.status),
+        )
+      )
+        return {
+          ok: false,
+          code: "STAGING_FULL",
+          message:
+            "Expeda o pedido da área de separação antes de retirar outro.",
+        };
+      const result = inventory.pickOrder(id, ids);
+      if (result.ok)
+        fulfillment = {
+          action: "pick",
+          orderId: id,
+          boxIds: result.order.boxIds,
+          index: 0,
+          progress: 0,
+        };
+      return result;
+    },
+    checkOrder: (id, values) =>
+      practice ? practiceBlocked() : inventory.checkOrder(id, values),
+    dispatchOrder(id) {
+      if (!onDemand || !safe() || fulfillment)
+        return {
+          ok: false,
+          code: "UNAVAILABLE",
+          message:
+            "Conclua o movimento atual e rearme o ambiente antes de expedir.",
+        };
+      const result = inventory.dispatchOrder(id);
+      if (!result.ok) return result;
+      fulfillment = {
+        action: "ship",
+        orderId: id,
+        boxIds: result.order.boxIds,
+        index: 0,
+        progress: 0,
+      };
+      log(
+        `${id}: expedição autorizada para ${result.boxes.length} caixas.`,
+        "success",
+        "shipping",
+      );
+      return result;
+    },
     exportState,
     importState,
     start,
@@ -755,23 +1208,26 @@ export function createSimulation(initialBatch = 12, options = {}) {
     },
     setProduct(id) {
       if (getProduct(id).id !== id) return false;
+      if (onDemand && workInProgress()) return false;
       product = id;
       reset();
       return true;
     },
     setScope(next, id = focus) {
+      if (practice && next === "line") return returnLine();
       if (
         !["bench", "line"].includes(next) ||
         !ENVIRONMENTS.some((e) => e.id === id)
       )
         return false;
+      if (onDemand && workInProgress()) return false;
       scope = next;
       focus = id;
       reset();
       return true;
     },
     setSpeed(value) {
-      if (![0.5, 1, 2, 4].includes(value)) return false;
+      if (![0.5, 1, 2, 4, 8].includes(value)) return false;
       speed = value;
       return true;
     },
@@ -864,7 +1320,26 @@ export function createSimulation(initialBatch = 12, options = {}) {
       } else log("Saída desobstruída.", "info", id);
     },
     get snapshot() {
+      const inventoryState = onDemand ? inventory.snapshot : null;
       return {
+        onDemand,
+        practice,
+        hasPausedLine: practice && !!lineCheckpoint,
+        ...(onDemand ? { inventory: inventoryState } : {}),
+        ...(onDemand
+          ? {
+              fulfillment: fulfillment
+                ? {
+                    ...structuredClone(fulfillment),
+                    boxId: fulfillment.boxIds[fulfillment.index],
+                    total: fulfillment.boxIds.length,
+                    box: inventoryState.boxes.find(
+                      (b) => b.id === fulfillment.boxIds[fulfillment.index],
+                    ),
+                  }
+                : null,
+            }
+          : {}),
         product,
         batch,
         time,
@@ -880,7 +1355,7 @@ export function createSimulation(initialBatch = 12, options = {}) {
           history: u.history.map((h) => ({ ...h })),
         })),
         cells: cells.map((c, i) => {
-          const e = ENVIRONMENTS[i],
+          const e = cellEnvironment(i),
             active = getProcessStep(c, e),
             part = !!c.unit;
           const stage =
@@ -896,6 +1371,16 @@ export function createSimulation(initialBatch = 12, options = {}) {
                       ? `${c.unit.id} sai do topo da pilha recebida e \u00e9 levado pelo p\u00f3rtico at\u00e9 o endere\u00e7o de estoque.`
                       : `${c.unit.id} entra como ${MATERIALS[c.unit.material].toLowerCase()}.`,
                   progress: c.progress / 0.5,
+                  ...(c.id === "receiving"
+                    ? {
+                        duration: cookwareReceivingDuration(
+                          c.done,
+                          c.done + c.stock.length + (c.unit ? 1 : 0),
+                        ),
+                      }
+                    : c.id === "packing"
+                      ? { duration: cookwarePackingFeedDuration() }
+                      : {}),
                 }
               : c.phase === "unloading"
                 ? {
@@ -926,6 +1411,7 @@ export function createSimulation(initialBatch = 12, options = {}) {
                   ? "Transferir para a saída"
                   : e.recipe.find((r) => r.id === nextId)?.label;
           return {
+            ...(onDemand ? { onDemand: true } : {}),
             id: c.id,
             lastUnitId: c.lastUnitId,
             mode: c.mode,

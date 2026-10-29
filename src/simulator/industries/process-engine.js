@@ -6,10 +6,15 @@ import {
 } from "../state-validation.js";
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 export function createProcessSimulation(definition, options = {}) {
+  const maxQuantity = definition.maxQuantity ?? 30;
   let product =
     definition.products.find((p) => p.id === options.product) ??
     definition.products[0];
-  let total = clamp(Number(options.quantity) || 4, 1, 30),
+  let total = clamp(
+      Math.floor(Number(options.quantity ?? definition.defaultQuantity) || 4),
+      1,
+      maxQuantity,
+    ),
     mode = options.mode ?? "guided",
     speed = 1;
   let settings = Object.fromEntries(
@@ -28,6 +33,7 @@ export function createProcessSimulation(definition, options = {}) {
     fault,
     history,
     completedSteps,
+    completedUnits,
     elapsed;
   function nextUnit() {
     unit = {
@@ -51,6 +57,7 @@ export function createProcessSimulation(definition, options = {}) {
     done = 0;
     fault = "";
     history = [];
+    completedUnits = [];
     elapsed = 0;
     nextUnit();
   }
@@ -60,6 +67,25 @@ export function createProcessSimulation(definition, options = {}) {
   }
   function authorize() {
     if (emergency || phase !== "ready") return false;
+    while (
+      definition.shouldRun?.(currentStep().id, unit, {
+        done,
+        total,
+        completedUnits,
+        settings,
+      }) === false
+    ) {
+      completedSteps.push(currentStep().id);
+      if (stepIndex === definition.steps.length - 1) {
+        phase = "outgoing";
+        fromX = x;
+        toX = definition.exitX ?? 8;
+        progress = 0;
+        return true;
+      }
+      stepIndex++;
+    }
+    options.onAuthorize?.(currentStep().id,unit,{done,total});
     const error = validate();
     if (error) {
       fault = error;
@@ -100,15 +126,44 @@ export function createProcessSimulation(definition, options = {}) {
           break;
         }
       }
+      const distance =
+        definition.movementDistance?.({
+          phase,
+          unit,
+          done,
+          total,
+          fromX,
+          toX,
+          step: currentStep().id,
+          benchStage: definition.benchStage,
+        }) ?? Math.abs(toX - fromX);
       const duration =
         phase === "operating"
-          ? currentStep().duration
-          : Math.max(0.65, Math.abs(toX - fromX) / 2);
+          ? (definition.operationDuration?.(currentStep().id, unit, {
+              done,
+              total,
+              completedUnits,
+              settings,
+            }) ?? currentStep().duration)
+          : phase === "outgoing" && Number.isFinite(definition.outgoingDuration)
+            ? definition.outgoingDuration
+            : definition.transportSpeed
+              ? (definition.movementDistance
+                  ? distance
+                  : (definition.transportDistance ?? distance)) /
+                definition.transportSpeed
+              : Math.max(
+                  0.65,
+                  phase === "outgoing" ? (definition.transferDuration ?? 0) : 0,
+                  distance / 2,
+                );
       const portion = Math.min(remain, (1 - progress) * duration);
-      progress += portion / duration;
+      progress = duration > 0 ? progress + portion / duration : 1;
       remain -= portion;
       if (phase !== "operating") {
-        const t = progress * progress * (3 - 2 * progress);
+        const t = definition.transportSpeed
+          ? progress
+          : progress * progress * (3 - 2 * progress);
         x = fromX + (toX - fromX) * t;
       }
       if (progress < 1 - 1e-8) break;
@@ -118,6 +173,7 @@ export function createProcessSimulation(definition, options = {}) {
         phase = "operating";
       } else if (phase === "outgoing") {
         x = toX;
+        completedUnits.push(structuredClone(unit));
         done++;
         if (done === total) {
           phase = "complete";
@@ -128,10 +184,16 @@ export function createProcessSimulation(definition, options = {}) {
         }
       } else {
         const op = currentStep();
-        definition.apply?.(op.id, unit, settings);
+        definition.apply?.(op.id, unit, settings, {
+          done,
+          total,
+          completedUnits,
+          settings,
+        });
         completedSteps.push(op.id);
         history.push({ unit: unit.id, step: op.id, time: elapsed });
-        if (stepIndex === definition.steps.length - 1) {
+        options.onStepComplete?.(op.id,unit,{done,total,completedUnits,history,elapsed});
+        if (stepIndex === definition.steps.length - 1 || options.stopAfterStep===op.id) {
           phase = "outgoing";
           fromX = x;
           toX = definition.exitX ?? 8;
@@ -148,6 +210,7 @@ export function createProcessSimulation(definition, options = {}) {
     return structuredClone({
       version: 1,
       environment: definition.id,
+      ...(definition.layoutVersion?{layoutVersion:definition.layoutVersion}:{}),
       steps: definition.steps.map((s) => s.id),
       product: product.id,
       total,
@@ -167,6 +230,7 @@ export function createProcessSimulation(definition, options = {}) {
       fault,
       history,
       completedSteps,
+      completedUnits,
       elapsed,
     });
   }
@@ -180,16 +244,47 @@ export function createProcessSimulation(definition, options = {}) {
         return false;
       const next = structuredClone(value),
         p = definition.products.find((p) => p.id === next.product);
+      const beverageMigration = definition.id === "beverages" && definition.layoutVersion === 3 &&
+        (next.layoutVersion === undefined || next.layoutVersion === 2);
+      if (definition.layoutVersion && next.layoutVersion !== undefined &&
+        next.layoutVersion !== definition.layoutVersion && !beverageMigration) return false;
+      if (beverageMigration) {
+        const old = { receive: -6, wash: -4, fill: -2, cap: 0, label: 2, pack: 4,
+          seal: next.layoutVersion === 2 ? 15.2 : 6, ship: next.layoutVersion === 2 ? 17.2 : 8 };
+        const oldExit = next.layoutVersion === 2 ? 20.2 : 11;
+        if (definition.benchStage) {
+          const delta = definition.steps[0].x - old[definition.benchStage];
+          for (const key of ["x", "fromX", "toX"]) if (typeof next[key] === "number") next[key] += delta;
+        } else {
+          const anchors = [[-8, definition.entryX ?? -8],
+            ...definition.steps.map(step => [old[step.id], step.x]),
+            [oldExit, definition.exitX ?? oldExit]].sort((a,b) => a[0]-b[0]);
+          const remap = x => {
+            for (let i=1;i<anchors.length;i++) if (x<=anchors[i][0]) {
+              const [from,to]=[anchors[i-1],anchors[i]];
+              return from[1]+(to[1]-from[1])*(x-from[0])/(to[0]-from[0]);
+            }
+            return anchors.at(-1)[1];
+          };
+          for (const key of ["x", "fromX", "toX"]) if (typeof next[key] === "number") next[key] = remap(next[key]);
+          // A transfer can cross several anchors; preserve its normalized progress
+          // on the remapped segment rather than introducing a nonlinear position.
+          if (["moving","outgoing"].includes(next.phase) && typeof next.progress === "number") {
+            const t = definition.transportSpeed ? next.progress : next.progress*next.progress*(3-2*next.progress);
+            next.x=next.fromX+(next.toX-next.fromX)*t;
+          }
+        }
+      }
       if (
         !p ||
         JSON.stringify(next.steps) !==
           JSON.stringify(definition.steps.map((s) => s.id)) ||
-        !integerIn(next.total, 1, 30) ||
+        !integerIn(next.total, 1, maxQuantity) ||
         !integerIn(next.done, 0, next.total) ||
         !integerIn(next.stepIndex, 0, definition.steps.length - 1) ||
         !numberIn(next.progress, 0, 1) ||
         !numberIn(next.elapsed, 0, 1e8) ||
-        !numberIn(next.speed, 0.5, 4) ||
+        !numberIn(next.speed, 0.5, 8) ||
         !["auto", "guided"].includes(next.mode) ||
         typeof next.emergency !== "boolean" ||
         typeof next.running !== "boolean" ||
@@ -211,7 +306,7 @@ export function createProcessSimulation(definition, options = {}) {
         return false;
       const count =
         next.phase === "outgoing" || next.phase === "complete"
-          ? definition.steps.length
+          ? options.stopAfterStep ? definition.steps.findIndex(step=>step.id===options.stopAfterStep)+1 : definition.steps.length
           : next.stepIndex;
       if (
         JSON.stringify(next.completedSteps) !==
@@ -238,7 +333,9 @@ export function createProcessSimulation(definition, options = {}) {
       )
         return false;
       if (["moving", "outgoing"].includes(next.phase)) {
-        const t = next.progress * next.progress * (3 - 2 * next.progress);
+        const t = definition.transportSpeed
+          ? next.progress
+          : next.progress * next.progress * (3 - 2 * next.progress);
         if (
           Math.abs(next.x - (next.fromX + (next.toX - next.fromX) * t)) > 0.001
         )
@@ -261,6 +358,33 @@ export function createProcessSimulation(definition, options = {}) {
       )) {
         if (typeof next.unit[key] !== typeof value) return false;
       }
+      const archived =
+        next.completedUnits ??
+        Array.from({ length: next.done }, (_, i) => {
+          const item = {
+            id: `LOT-${String(i + 1).padStart(3, "0")}`,
+            product: p.id,
+            ...definition.initialize(p, next.settings, {
+              id: `LOT-${String(i + 1).padStart(3, "0")}`,
+            }),
+          };
+          for (const step of definition.steps)
+            definition.apply?.(step.id, item, next.settings);
+          return next.phase === "complete" && i === next.done - 1
+            ? structuredClone(next.unit)
+            : item;
+        });
+      if (
+        !Array.isArray(archived) ||
+        archived.length !== next.done ||
+        !archived.every(
+          (item, i) =>
+            item.product === p.id &&
+            item.id === `LOT-${String(i + 1).padStart(3, "0")}`,
+        )
+      )
+        return false;
+      completedUnits = archived;
       product = p;
       total = next.total;
       mode = next.mode;
@@ -313,7 +437,7 @@ export function createProcessSimulation(definition, options = {}) {
       if (["guided", "auto"].includes(value)) mode = value;
     },
     setSpeed(value) {
-      speed = clamp(Number(value) || 1, 0.5, 4);
+      speed = clamp(Number(value) || 1, 0.5, 8);
     },
     setSetting(id, value) {
       if (!definition.controls?.some((c) => c.id === id)) return;
@@ -332,15 +456,35 @@ export function createProcessSimulation(definition, options = {}) {
       product = definition.products.find((p) => p.id === id) ?? product;
       reset();
     },
+    extendQuantity(value) {
+      const next = Math.floor(Number(value));
+      if (!Number.isFinite(next) || next <= total || next > maxQuantity)
+        return false;
+      total = next;
+      if (phase === "complete") nextUnit();
+      return true;
+    },
     setQuantity(value) {
-      total = clamp(Math.floor(Number(value) || 1), 1, 30);
+      total = clamp(Math.floor(Number(value) || 1), 1, maxQuantity);
       reset();
+    },
+    get status() {
+      return { phase, running, emergency, step: currentStep() };
     },
     get snapshot() {
       return structuredClone({
         phase,
         stepIndex,
-        step: currentStep(),
+        step: {
+          ...currentStep(),
+          duration:
+            definition.operationDuration?.(currentStep().id, unit, {
+              done,
+              total,
+              completedUnits,
+              settings,
+            }) ?? currentStep().duration,
+        },
         progress,
         running,
         mode,
@@ -352,6 +496,7 @@ export function createProcessSimulation(definition, options = {}) {
         emergency,
         product,
         completedSteps,
+        completedUnits,
         elapsed,
         history,
         position: { x, fromX, toX },

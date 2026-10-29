@@ -39,11 +39,11 @@ for (const definition of [BEVERAGES, FURNITURE, PARCELS]) {
       assert.equal(final.done, 3);
       assert.equal(final.fault, "");
       assert.equal(final.running, false);
-      assert.equal(final.history.length, definition.steps.length * 3);
+      assert.equal(final.history.length, definition.id === "beverages" ? 6 * 3 + 2 : definition.steps.length * 3);
       for (const id of ["LOT-001", "LOT-002", "LOT-003"])
         assert.deepEqual(
           final.history.filter((e) => e.unit === id).map((e) => e.step),
-          definition.steps.map((s) => s.id),
+          definition.steps.filter((s) => definition.id !== "beverages" || id === "LOT-003" || !["seal", "ship"].includes(s.id)).map((s) => s.id),
         );
       assert.equal(final.position.x, definition.exitX);
       const snapshot = sim.snapshot;

@@ -14,19 +14,42 @@ export function installLearningFeatures({
   exportSimulation,
   restoreSimulation,
   startMission,
+  continueOrder,
   getView,
   onSelect,
   getSelected,
   onRefresh,
 }) {
-  const definition = missionDefinition(environment, steps),
-    mission = createMission(definition),
-    store = createProgressStore(environment, { demo: true });
+  let definition = missionDefinition(environment, steps, undefined, {
+      onDemand: getState().onDemand,
+    }),
+    mission = createMission(definition);
+  const store = createProgressStore(environment, { demo: true });
   const host = document.querySelector(".inspector-panel"),
     panel = document.createElement("section");
   panel.className = "panel-section learning-panel";
   panel.innerHTML =
     '<h2>Missão do pedido</h2><p class="mission-objective"></p><progress class="mission-progress" max="1" value="0" aria-label="Progresso da missão"></progress><p class="mission-state" role="status"></p><div class="mission-actions"><button class="primary" data-mission-start>Iniciar missão</button><button data-mission-fault>Iniciar com falha</button></div><p class="muted">Iniciar uma missão prepara um novo lote de 12 unidades na linha integrada.</p><p class="learning-save" role="status" aria-live="polite"></p><button data-retry-save hidden>Tentar novamente</button><button data-exit-unsaved hidden>Sair sem salvar alterações</button><button data-restart-saved hidden>Substituir atividade salva e reiniciar</button><div class="learning-diagnostic" hidden><h2>Investigar a falha</h2><p data-fault-signals></p><label>Causa identificada<select aria-label="Causa identificada"></select></label><button data-check-diagnosis>Conferir diagnóstico</button><p data-diagnosis-result role="status"></p></div>';
+  if (environment === "beverages") {
+    const choice = document.createElement("label");
+    choice.textContent = "Pedido da missão";
+    const select = document.createElement("select");
+    select.dataset.missionQuantity = "";
+    select.setAttribute("aria-label", "Quantidade de garrafas da missão");
+    for (const [value, text] of [
+      [108, "108 garrafas · 12 caixas de 9"],
+      [12, "Lote de teste · 12 garrafas (9 + 3)"],
+    ]) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = text;
+      select.append(option);
+    }
+    choice.append(select);
+    panel.querySelector(".mission-actions").before(choice);
+    panel.querySelector(".muted").textContent =
+      "Iniciar uma missão prepara o pedido escolhido na linha integrada.";
+  }
   host.insertBefore(panel, host.querySelector(".interaction-card"));
   panel.querySelector(".mission-objective").textContent = definition.objective;
   const overviewButton = document.createElement("button");
@@ -160,7 +183,19 @@ export function installLearningFeatures({
     return pending;
   }
   async function begin(withFault) {
-    startMission(withFault);
+    const quantity = Number(
+      panel.querySelector("[data-mission-quantity]")?.value ?? 12,
+    );
+    if (startMission(withFault, quantity) === false) {
+      onRefresh();
+      return;
+    }
+    definition = missionDefinition(environment, steps, quantity, {
+      onDemand: getState().onDemand,
+    });
+    mission = createMission(definition);
+    panel.querySelector(".mission-objective").textContent =
+      definition.objective;
     mission.start(missionEvidence(getState(), definition).product);
     lastResult = "";
     replace = true;
@@ -188,16 +223,18 @@ export function installLearningFeatures({
   function render() {
     const state = getState(),
       evidence = missionEvidence(state, definition);
-    mission.observe(evidence);
+    if (!state.practice) mission.observe(evidence);
     const m = mission.snapshot;
     panel.querySelector(".mission-progress").value = m?.progress ?? 0;
-    panel.querySelector(".mission-state").textContent = !m
-      ? "Missão ainda não iniciada."
-      : m.status === "interrupted"
-        ? "Missão interrompida: o produto ou a abrangência mudou. Inicie um novo pedido para avaliar o fluxo completo."
-        : m.completed
-          ? `Pedido concluído: ${m.done} unidades passaram por todas as operações. ${m.faultsResolved.length} ocorrência(s) corrigida(s). Os sensores liberaram a saída após as verificações.`
-          : `${m.done} / ${m.target} unidades entregues · ${Math.round(m.progress * 100)}% das operações concluídas.`;
+    panel.querySelector(".mission-state").textContent = state.practice
+      ? "Teste independente. A linha e a missão estão preservadas; volte à linha para continuar."
+      : !m
+        ? "Missão ainda não iniciada."
+        : m.status === "interrupted"
+          ? "Missão interrompida: o produto ou a abrangência mudou. Inicie um novo pedido para avaliar o fluxo completo."
+          : m.completed
+            ? `Pedido concluído: ${m.done} unidades passaram por todas as operações. ${m.faultsResolved.length} ocorrência(s) corrigida(s). Os sensores liberaram a saída após as verificações.`
+            : `${m.done} / ${m.target} unidades entregues · ${Math.round(m.progress * 100)}% das operações concluídas.`;
     if (m?.completed && lastResult !== definition.id) {
       results = [
         ...results.slice(-99),
@@ -277,6 +314,16 @@ export function installLearningFeatures({
     try {
       const saved = await store.load();
       if (saved) {
+        definition = missionDefinition(
+          environment,
+          steps,
+          saved.mission?.state?.target,
+        );
+        mission = createMission(definition);
+        panel.querySelector(".mission-objective").textContent =
+          definition.objective;
+        const choice = panel.querySelector("[data-mission-quantity]");
+        if (choice) choice.value = 108;
         if (
           !restoreSimulation(saved.simulation, saved.view) ||
           !mission.importState(
@@ -294,6 +341,29 @@ export function installLearningFeatures({
         else getView()?.setView(camera);
         saveLabel.textContent =
           "Atividade retomada no ponto salvo. Confira a linha e clique em Iniciar.";
+        if (environment === "beverages" && saved.simulation.quantity < 108) {
+          saveLabel.textContent = `Lote salvo de ${saved.simulation.quantity} garrafas preservado. Para preencher 12 caixas de 9, inicie um novo pedido de 108 garrafas. A caixa parcial já fechada pertence ao pedido anterior.`;
+          panel.querySelector("[data-mission-start]").textContent =
+            "Iniciar novo pedido de 108 garrafas";
+          if (
+            saved.simulation.scope === "bench" &&
+            saved.simulation.selected === "receive" &&
+            continueOrder
+          ) {
+            saveLabel.textContent = `Recebimento salvo de ${saved.simulation.quantity} garrafas preservado. Você pode continuar até 108 sem repetir as já retiradas.`;
+            const resume = document.createElement("button");
+            resume.textContent = "Continuar recebimento até 108 garrafas";
+            resume.onclick = async () => {
+              if (!continueOrder()) return;
+              resume.remove();
+              replace = true;
+              onRefresh();
+              render();
+              await save(true);
+            };
+            saveLabel.after(resume);
+          }
+        }
       } else
         saveLabel.textContent = true
           ? "Seu progresso fica salvo neste navegador."
