@@ -110,7 +110,8 @@ for (const product of PRODUCTS) {
       const onShelf = pose(product, id, "store", 1),
         underPart = pose(product, id, "retrieve", 0.45);
       near(onShelf.z, -3.6);
-      near(onShelf.lift, 1.6);
+      near(onShelf.support + CLEARANCE, CONVEYOR_TOP + 1.6);
+      near(onShelf.lift, 1.6 - CLEARANCE);
       near(underPart.z, onShelf.z);
       near(underPart.lift, onShelf.lift);
       const p = pose(product, id, "lower", 1);

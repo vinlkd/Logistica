@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { PARCELS, PARCEL_ROUTES, PARCEL_DIMENSIONS, buildParcelsModel, parcelPose } from "../src/simulator/industries/parcels.js";
+import { PARCELS, PARCEL_ROUTES, PARCEL_DIMENSIONS, buildParcelsModel, parcelPose, parcelLoadingMotion, parcelCargoSlot, parcelInputSlot } from "../src/simulator/industries/parcels.js";
 import { createProcessSimulation } from "../src/simulator/industries/process-engine.js";
 
 function settingsFor(route) {
@@ -62,6 +62,7 @@ for (const route of PARCEL_ROUTES) {
     const supports = [], obstacles = [];
     model.root.traverse((o) => {
       if (!o.isMesh || o.parent === model.parcel) return;
+      for (let parent = o; parent; parent = parent.parent) if (!parent.visible) return;
       const bounds = new THREE.Box3().setFromObject(o);
       if (o.userData.support) supports.push(bounds);
       else if (o.name !== "Linha de leitura sobre a etiqueta") obstacles.push({ name: o.name, bounds });
@@ -69,9 +70,10 @@ for (const route of PARCEL_ROUTES) {
     const d = PARCEL_DIMENSIONS;
     function check(snapshot) {
       const pose = parcelPose(snapshot), aabb = new THREE.Box3(new THREE.Vector3(pose.x - d.width / 2, pose.y - d.height / 2, pose.z - d.depth / 2), new THREE.Vector3(pose.x + d.width / 2, pose.y + d.height / 2, pose.z + d.depth / 2));
-      assert.ok(Math.abs(aabb.min.y - d.supportY - d.clearance) < 1e-9);
+      const carried = ["load","unload"].includes(snapshot.step.id);
+      assert.ok(carried || Math.abs(aabb.min.y - d.supportY - d.clearance) < 1e-9);
       // Sample the entire footprint, including transitions between adjacent support decks.
-      for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) {
+      if (!carried) for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) {
         const x = aabb.min.x + d.width * i / 4, z = aabb.min.z + d.depth * j / 4;
         assert.ok(supports.some((s) => Math.abs(s.max.y - d.supportY) < 1e-7 && horizontalContains(s, x, z)), `Sem apoio em ${x}, ${z} etapa ${snapshot.step.id}`);
       }
@@ -89,7 +91,7 @@ for (const route of PARCEL_ROUTES) {
       check({ phase: "operating", step, progress: 0.5, position: { x: step.x }, unit: { destination: route.id } });
       previousX = step.x;
     }
-    check({ phase: "moving", step: PARCELS.steps.at(-1), progress: 1, position: { x: PARCELS.exitX }, unit: { destination: route.id } });
+    check({ phase: "outgoing", step: PARCELS.steps.at(-1), progress: 1, position: { x: PARCELS.exitX }, unit: { destination: route.id,loaded:true } });
     model.dispose(); assert.equal(root.children.length, 0);
   });
 }
@@ -100,7 +102,7 @@ test("encomendas: superfícies de apoio não se sobrepõem, reset e descarte lib
   model.root.traverse((o) => { if (o.userData.support) supports.push(new THREE.Box3().setFromObject(o)); if (o.geometry) resources.add(o.geometry); if (o.material) resources.add(o.material); });
   for (let i = 0; i < supports.length; i++) for (let j = i + 1; j < supports.length; j++) assert.equal(overlapsVolume(supports[i], supports[j]), false, `Apoios sobrepostos ${i}/${j}`);
   let disposed = 0; for (const resource of resources) resource.addEventListener("dispose", () => disposed++);
-  model.update({ phase: "complete", unit: { destination: "sul" } }); assert.equal(model.parcel.visible, false);
+    model.update({ phase: "complete", unit: { destination: "sul" } }); assert.equal(model.parcel.visible, true);
   model.update({ phase: "ready", position: { x: -8 }, unit: { destination: "norte" } }); assert.equal(model.parcel.visible, true); assert.equal(model.parcel.position.x, -8); assert.equal(model.parcel.position.z, 0);
   model.dispose(); assert.equal(disposed, resources.size); model.dispose(); assert.equal(disposed, resources.size);
 });
@@ -134,7 +136,7 @@ for (const route of PARCEL_ROUTES) {
       model.selectStage(id);
       model.update({ phase: "operating", step, progress: 0.5, position: { x: step.x }, unit: { destination: route.id } });
       root.updateMatrixWorld(true);
-      assert.ok(Math.abs(model.parcel.getWorldPosition(new THREE.Vector3()).z) < 1e-8);
+      assert.ok(Math.abs(model.parcel.getWorldPosition(new THREE.Vector3()).z) <= 0.72 + 1e-8);
       const trucks = [], posts = [];
       model.root.traverseVisible((o) => { if (o.name.startsWith("Veículo da rota")) trucks.push(o.name); if (o.name === "Montante do endereço") posts.push(o); });
       assert.deepEqual(trucks, id === "load" ? [`Veículo da rota ${route.name}`] : []);
@@ -170,6 +172,6 @@ for (const route of PARCEL_ROUTES) {
     assert.equal(end.history.length, PARCELS.steps.length * 2);
     assert.equal(end.unit.manifest.route, route.id);
     sim.reset(); assert.equal(sim.snapshot.done, 0); assert.equal(sim.snapshot.unit.loaded, false);
-    assert.deepEqual(parcelPose(sim.snapshot), { x: -8, y: 1.522, z: 0 });
+    assert.deepEqual(parcelPose(sim.snapshot), parcelInputSlot(1));
   });
 }

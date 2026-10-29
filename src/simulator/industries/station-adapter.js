@@ -1,3 +1,4 @@
+import { stationPresentation } from "./station-presentation.js";
 export function buildIndustryStation({
   THREE,
   base,
@@ -7,6 +8,7 @@ export function buildIndustryStation({
   build,
 }) {
   const root = new THREE.Group();
+  const baseOriginX = base.root.position.x;
   base.root.add(root);
   const water = new THREE.MeshStandardMaterial({
     color: "#50b9dc",
@@ -61,7 +63,9 @@ export function buildIndustryStation({
   const splitRollers = new THREE.Group();
   base.root.add(splitRollers);
   let stageId = definition.steps[0].id,
-    lastCuts = "";
+    lastCuts = "",
+    lastReceivingTransport = null,
+    lastBeltPosition = null;
   function visible(o) {
     for (let p = o; p; p = p.parent) if (!p.visible) return false;
     return true;
@@ -76,10 +80,16 @@ export function buildIndustryStation({
     base.root.updateMatrixWorld(true);
     const inverse = base.root.matrixWorld.clone().invert(),
       obstacles = [];
-    root.traverse((o) => {
-      if (!o.isMesh || !visible(o)) return;
+    root.traverseVisible((o) => {
+      if (!o.isMesh) return;
       for (let p = o; p && p !== root; p = p.parent) if (moving.has(p)) return;
-      const b = new THREE.Box3().setFromObject(o).applyMatrix4(inverse);
+      // Matrices were updated once above. setFromObject would walk parents
+      // again for every mesh, including every bottle in the parked cases.
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      const b = new THREE.Box3()
+        .copy(o.geometry.boundingBox)
+        .applyMatrix4(o.matrixWorld)
+        .applyMatrix4(inverse);
       if (b.min.y < 1.194 && b.max.y > 1.046) obstacles.push(b);
     });
     const cuts = base.rollers.map((roller) => {
@@ -121,7 +131,15 @@ export function buildIndustryStation({
     stageId = id;
     const stage =
       definition.steps.find((s) => s.id === id) ?? definition.steps[0];
-    root.position.x = -stage.x;
+    const caseStage =
+      definition.id === "beverages" && ["pack", "seal", "ship"].includes(id);
+    const conveyorStage = caseStage
+      ? definition.steps.find((step) => step.id === "pack")
+      : stage;
+    // Keep the same packing conveyor in every case view. Moving only the
+    // machinery puts the sealer's table back over a freshly centred belt.
+    base.root.position.x = baseOriginX + conveyorStage.x - stage.x;
+    root.position.x = -conveyorStage.x;
     model.selectStage(id);
     fitRollers();
   }
@@ -135,23 +153,66 @@ export function buildIndustryStation({
     splitRollers,
     selectStage,
     update(snapshot, dt) {
-      model.update(snapshot, dt);
-      if (snapshot.scope === "line" && snapshot.step.id !== stageId)
+      const presentation = stationPresentation(snapshot, definition, stageId);
+      const state = presentation.state;
+      model.update(state, dt);
+      const receiving = model.receiver?.state;
+      const packing = model.output?.packingState;
+      const receivingTravel =
+        stageId === "receive" && receiving
+          ? {
+              index: `receive/${receiving.index}`,
+              distance: receiving.conveyorTravel,
+            }
+          : stageId === "pack" && packing
+            ? {
+                index: `pack/${packing.index}`,
+                distance: packing.conveyorTravel,
+              }
+            : null;
+      const conveyorDelta =
+        receivingTravel &&
+        lastReceivingTransport?.index === receivingTravel.index &&
+        state.running &&
+        state.outputs?.work
+          ? Math.max(
+              0,
+              receivingTravel.distance - lastReceivingTransport.distance,
+            )
+          : 0;
+      lastReceivingTransport = receivingTravel;
+      const position = {
+        id: state.unit?.id,
+        x: state.position.x,
+        visible: presentation.visible,
+      };
+      const beltDelta =
+        stageId !== "receive" &&
+        state.running &&
+        (state.outputs?.motor || state.outputs?.transfer) &&
+        position.visible &&
+        lastBeltPosition?.visible &&
+        lastBeltPosition.id === position.id
+          ? Math.max(0, position.x - lastBeltPosition.x)
+          : 0;
+      lastBeltPosition = position;
+      if (!presentation.visible)
         for (const part of [model.bottle, model.piece, model.parcel])
           if (part) part.visible = false;
       fitRollers();
       for (const [key, lamp] of Object.entries(base.lamps))
         lamp.material.emissiveIntensity = (
           key === "red"
-            ? snapshot.emergency || !!snapshot.fault
+            ? state.emergency || !!state.fault
             : key === "green"
-              ? snapshot.running
-              : !snapshot.running
+              ? state.running
+              : !state.running
         )
           ? 0.8
           : 0.04;
-      for (const roller of base.rollers)
-        if (snapshot.running) roller.rotateY(dt * 2);
+      const travel = conveyorDelta > 0 ? conveyorDelta : beltDelta;
+      if (travel > 0)
+        for (const roller of base.rollers) roller.rotateY(-travel / 0.075);
     },
     dispose() {
       model.dispose?.();

@@ -1,7 +1,8 @@
+import {buildTruckDock,shippingDockPose,receivingDockPose} from "./truck-dock.js";
 const ROUTES = [
-  { id: "norte", name: "Norte", address: "A-01", z: -2.6, color: "#164193", mass: 2.4 },
+  { id: "norte", name: "Norte", address: "A-01", z: -4.2, color: "#164193", mass: 2.4 },
   { id: "sul", name: "Sul", address: "B-01", z: 0, color: "#41816f", mass: 4.8 },
-  { id: "serra", name: "Serra", address: "C-01", z: 2.6, color: "#dfb249", mass: 1.2 },
+  { id: "serra", name: "Serra", address: "C-01", z: 4.2, color: "#dfb249", mass: 1.2 },
 ];
 export const PARCEL_ROUTES = ROUTES;
 const routeFor = (value) => ROUTES.find((r) => r.id === value) ?? ROUTES[0];
@@ -15,12 +16,12 @@ export const PARCELS = {
   description: "Da doca à rota: identificar, pesar, desviar para o endereço certo e conferir a expedição.",
   products: ROUTES.map((r) => ({ id: r.id, name: `Encomenda · ${r.name}`, description: `Volume de ${r.mass.toFixed(1).replace(".", ",")} kg para a rota ${r.name}.` })),
   steps: [
-    { id: "unload", label: "Descarregar", x: -6, duration: 1.6, help: "A doca transfere um volume identificado para a esteira de entrada." },
+    { id: "unload", label: "Descarregar", x: -6, duration: 12, help: "A doca transfere um volume identificado para a esteira de entrada." },
     { id: "scan", label: "Ler etiqueta", x: -3.8, duration: 1.5, help: "O pórtico lê o código da encomenda e consulta o destino." },
     { id: "weigh", label: "Pesar", x: -1.6, duration: 1.8, help: "A balança confere a massa declarada. Corrija a calibração se houver divergência." },
     { id: "sort", label: "Separar por destino", x: 0.6, duration: 1.5, help: "Escolha o destino indicado na etiqueta. O desviador encaminha o volume à sua rua." },
     { id: "store", label: "Armazenar", x: 3.8, duration: 1.7, help: "Confira o endereço de estoque da rota e mantenha o corredor livre." },
-    { id: "load", label: "Carregar por rota", x: 6.6, duration: 2, help: "Confira rota e quantidade antes de liberar a encomenda para o veículo." },
+    { id: "load", label: "Carregar por rota", x: 6.6, duration: 12, help: "Confira rota e quantidade. A garra segura a encomenda, leva à posição livre e a apoia antes de soltar." },
   ],
   controls: [
     { id: "barcodeReadable", label: "Etiqueta legível", type: "checkbox", value: true },
@@ -82,6 +83,19 @@ export const PARCELS = {
 
 export const PARCEL_DIMENSIONS = Object.freeze({ width: 0.72, height: 0.62, depth: 0.58, supportY: 1.2, clearance: 0.012 });
 const clamp = (n) => Math.max(0, Math.min(1, n));
+const eased = (n) => { const t = clamp(n); return t * t * (3 - 2 * t); };
+export function parcelCargoSlot(index, destination) {
+  const tier = Math.floor(index / 15), column = Math.floor(index % 15 / 3), row = index % 3;
+  return { x: 18.5 - column * 0.8, y: 1.2 + 0.012 + 0.31 + tier * 0.632, z: routeFor(destination).z + (row - 1) * 0.72 };
+}
+export function parcelInputSlot(index){return {x:-12.65-Math.floor(index%15/3)*.8,y:1.522+Math.floor(index/15)*.632,z:(index%3-1)*.72};}
+export function parcelLoadingMotion(snapshot) {
+  const count=Math.max(0,snapshot.done??0),index=snapshot.phase==='complete'?Math.max(0,count-1):count;
+  const slot=parcelCargoSlot(index,snapshot.unit?.destination??snapshot.product?.id),lane=routeFor(snapshot.unit?.destination??snapshot.product?.id).z;
+  const t=snapshot.phase==='operating'?clamp(snapshot.progress??0):1;
+  const pose=shippingDockPose(t,slot,{x:6.6,y:1.522,z:lane});
+  return {pose,tool:{...pose,y:pose.y-.315},open:1,gripping:false};
+}
 // The diverter moves across a supported cross-belt, then along the selected lane.
 // Parameterizing by distance avoids a diagonal through a rack or a belt edge.
 function polyline(points, progress) {
@@ -106,6 +120,16 @@ export function parcelPose(snapshot) {
   if (snapshot.phase === "moving" && stepId === "store") {
     pose = polyline([[0.6, 0], [1.8, 0], [1.8, lane], [3.8, lane]], snapshot.progress ?? 0);
   }
+  if (false && stepId === "load" && snapshot.phase === "moving") {
+    const from = snapshot.position?.fromX ?? 3.8, to = snapshot.position?.toX ?? 6.6;
+    const fraction = to !== from ? clamp((x - from) / (to - from)) : 1;
+    pose.x = from + (5.6 - from) * fraction;
+  }
+  if (stepId === "unload" && ["ready","moving","operating"].includes(snapshot.phase)) {
+    const slot=parcelInputSlot(Math.max(0,(snapshot.total??1)-1-(snapshot.done??0)));
+    return ['moving','operating'].includes(snapshot.phase)?receivingDockPose(snapshot.phase==='moving'?snapshot.progress*.15:.15+snapshot.progress*.85,slot,{x:-6,y:1.522,raise:.65}):slot;
+  }
+  if (stepId === "load" && ["operating", "outgoing", "complete"].includes(snapshot.phase)) return parcelLoadingMotion(snapshot).pose;
   return { ...pose, y: PARCEL_DIMENSIONS.supportY + PARCEL_DIMENSIONS.clearance + PARCEL_DIMENSIONS.height / 2 };
 }
 
@@ -183,12 +207,13 @@ export function buildParcelsModel({ THREE, root, product, stationView = false })
     conveyor(-0.91, 1.15, 0);
   }
   stages("sort", "store");
-  conveyor(1.15, 2.45, 0, 6.9);
+  conveyor(1.15, 2.45, 0, 10.1);
   if (stationView) {
     stages("store");
     conveyor(0.1, 1.15, 0);
   }
   const trucks = [];
+  const loaders = [];
   for (const [i, r] of ROUTES.entries()) {
     currentRoute = r.id;
     stages("store", ...(!stationView ? ["load"] : []));
@@ -207,31 +232,21 @@ export function buildParcelsModel({ THREE, root, product, stationView = false })
     for (const x of [3.05, 4.55]) box(group, "Travessa de apoio da prateleira", x, 1.01, r.z, 0.12, 0.14, 1.9, m.yellow);
     box(group, "Travessa superior do estoque", 3.8, 2.85, r.z, 1.75, 0.1, 1.9, m.frame);
     label(group, `Endereço ${r.address}`, r.address, 3.8, 2.85, r.z + 0.956, 0.68, 0.14);
-    // Open flatbed keeps the loading path clear; wheels are below the bed.
     stages("load");
-    const truck = new THREE.Group(); truck.name = `Veículo da rota ${r.name}`; add(group, truck); trucks.push(truck);
-    box(truck, "Plataforma do veículo", 7.7, 1.1, r.z, 3.2, 0.2, 1.65, m.truckBody).userData.support = true;
-    box(truck, "Chassi", 8.3, 0.72, r.z, 4.4, 0.24, 1.3, m.dark);
-    box(truck, "Cabine", 9.95, 1.28, r.z, 1.05, 1.5, 1.6, m.truckPaint);
-    box(truck, "Para-brisa", 10.49, 1.6, r.z, 0.015, 0.52, 1.28, m.window);
-    for (const side of [-1, 1]) {
-      box(truck, "Vidro lateral da cabine", 9.98, 1.65, r.z + side * 0.805, 0.64, 0.42, 0.012, m.window);
-      box(truck, "Maçaneta", 9.62, 1.25, r.z + side * 0.81, 0.16, 0.035, 0.025, m.steel);
-      box(truck, "Farol", 10.49, 1.01, r.z + side * 0.55, 0.02, 0.13, 0.18, m.white);
-    }
-    for (const x of [6.6, 9.85]) for (const z of [r.z - 0.83, r.z + 0.83]) {
-      cylinder(truck, "Roda apoiada no chão", x, 0.42, z, 0.42, 0.22, m.rubber, "z");
-      cylinder(truck, "Cubo da roda", x, 0.42, z + Math.sign(z - r.z) * 0.115, 0.18, 0.02, m.steel, "z");
-    }
-    label(truck, `Identificação da rota ${r.name}`, r.name, 7.7, 1.08, r.z + 0.831, 0.68, 0.14);
+    const truckBox=(parent,x,y,z,w,h,d,material)=>box(parent,"Estrutura do caminhão",x,y,z,w,h,d,material);
+    const truckCyl=(parent,x,y,z,r,h,material)=>cylinder(parent,"Componente do caminhão",x,y,z,r,h,material);
+    const truckBar=(parent,a,b,r,material)=>{const av=new THREE.Vector3(...a),bv=new THREE.Vector3(...b),v=bv.clone().sub(av),mesh=truckCyl(parent,...av.clone().add(bv).multiplyScalar(.5).toArray(),r,v.length(),material);mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());return mesh;};
+    const args={THREE,root:group,box:truckBox,cyl:truckCyl,bar:truckBar,materials:m};
+    const dock=buildTruckDock(args,{shipping:true,stageId:"load",x:6.6,z:r.z});
+    dock.group.name=`Veículo da rota ${r.name}`;dock.group.userData.route=r.id;trucks.push(dock);
   }
-  currentRoute = null;
-  // Incoming dock, barcode portal, load cell scale, and switch are distinct machines.
-  stages("unload");
-  const dockZ = stationView ? -3.2 : -2;
-  box(group, "Plataforma de recebimento", -7.5, 0.55, dockZ, 3.1, 1.1, 1.9, m.frame);
-  box(group, "Tampo da doca", -7.5, 1.15, dockZ, 3.1, 0.1, 1.9, m.steel);
-  for (const x of [-8.3, -7.3, -6.3]) box(group, "Volume aguardando descarga", x, 1.52, dockZ - 0.2, 0.72, 0.64, 0.58, m.cardboard);
+  currentRoute=null;stages("unload");
+  const truckBox=(parent,x,y,z,w,h,d,material)=>box(parent,"Estrutura do caminhão",x,y,z,w,h,d,material);
+  const truckCyl=(parent,x,y,z,r,h,material)=>cylinder(parent,"Componente do caminhão",x,y,z,r,h,material);
+  const truckBar=(parent,a,b,r,material)=>{const av=new THREE.Vector3(...a),bv=new THREE.Vector3(...b),v=bv.clone().sub(av),mesh=truckCyl(parent,...av.clone().add(bv).multiplyScalar(.5).toArray(),r,v.length(),material);mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());return mesh;};
+  const incoming=buildTruckDock({THREE,root:group,box:truckBox,cyl:truckCyl,bar:truckBar,materials:m},{shipping:false,stageId:"unload",x:-6});
+  incoming.lift.name="Plataforma de recebimento";
+  const incomingCargo=Array.from({length:30},(_,index)=>box(incoming.group,"Volume aguardando descarga",0,0,0,.72,.62,.58,m.cardboard));
   stages("scan");
   for (const z of stationView ? [-2.4, 1.8] : [-0.97, 0.97]) box(group, "Coluna do leitor", -3.8, 1.45, z, 0.12, 2.9, 0.12, m.frame);
   box(group, "Pórtico do leitor", -3.8, 2.87, stationView ? -0.3 : 0, 0.22, 0.12, stationView ? 4.32 : 2.05, m.frame);
@@ -264,6 +279,15 @@ export function buildParcelsModel({ THREE, root, product, stationView = false })
   for (let i = 0; i < 12; i++) box(parcel, "Barra do código", 0.065 + i * 0.016, d.height / 2 + 0.008, 0, i % 3 ? 0.006 : 0.011, 0.002, 0.18, m.dark);
   const band = box(parcel, "Cor da rota conferida", 0, 0, d.depth / 2 + 0.003, d.width - 0.05, 0.14, 0.004, routeMaterials[0]);
   const status = label(parcel, "Código da encomenda", "EC-00001", 0, -0.07, d.depth / 2 + 0.008, 0.58, 0.12);
+  stages("load");
+  const cargo = Array.from({ length: 30 }, (_, index) => {
+    const item = new THREE.Group(); item.name = `Encomenda carregada ${index + 1}`; add(group, item);
+    box(item, "Caixa carregada", 0, 0, 0, d.width, d.height, d.depth, m.cardboard);
+    box(item, "Fita da caixa carregada", 0, d.height / 2 + 0.002, 0, 0.1, 0.004, d.depth - 0.01, m.tape);
+    box(item, "Etiqueta da caixa carregada", 0.16, d.height / 2 + 0.005, 0, 0.23, 0.004, 0.32, m.white);
+    item.visible = false; return item;
+  });
+  currentStages = null;
   let disposed = false;
   let selectedStage = null;
   let selectedRoute = routeFor(product?.id);
@@ -285,7 +309,7 @@ export function buildParcelsModel({ THREE, root, product, stationView = false })
     }
     const pose = parcelPose({ ...snapshot, product });
     parcel.position.set(pose.x, pose.y, pose.z);
-    parcel.visible = snapshot.phase !== "complete";
+    parcel.visible = true;
     band.material = routeMaterials[ROUTES.indexOf(r)];
     band.visible = !!u.scanned;
     const code = u.barcode ?? barcodeFor(u.id);
@@ -296,13 +320,28 @@ export function buildParcelsModel({ THREE, root, product, stationView = false })
     const weight = u.weighed ? `${u.weight.toFixed(2)} kg` : "Balança · kg";
     weightLabel.userData.text = weight; weightLabel.userData.setText?.(weight);
     diverter.material = snapshot.fault ? m.red : m.green;
+    const count = Math.max(0, Math.min(30, snapshot.done ?? 0));
+    for (const [index, item] of cargo.entries()) {
+      item.visible = (!selectedStage || selectedStage === "load") && index < count && !(snapshot.phase === "complete" && index === count - 1);
+      const slot = parcelCargoSlot(index, r.id); item.position.set(slot.x, slot.y, slot.z);
+    }
+    for(const dock of trucks){
+      const active=snapshot.step?.id==='load'&&dock.group.userData.route===r.id&&snapshot.phase==='operating';
+      dock.update({support:active?pose.y-.327:1.195,pose:active?{...pose,bottom:pose.y-.31,width:.72,depth:.58}:null,active});
+    }
+    const receiving=snapshot.step?.id==='unload'&&['moving','operating'].includes(snapshot.phase);
+    incoming.update({support:receiving?pose.y-.327:1.195,pose:receiving?{...pose,bottom:pose.y-.31,width:.72,depth:.58}:null,active:receiving});
+    const remaining=Math.max(0,(snapshot.total??1)-1-(snapshot.done??0));
+    incomingCargo.forEach((item,index)=>{item.visible=index<remaining;const p=parcelInputSlot(index);item.position.set(p.x+6,p.y,p.z);});
+
   }
   update({ phase: "ready", position: { x: -8 }, unit: PARCELS.initialize(product) });
   if (stationView) selectStage("unload");
   return {
-    root: group, parcel, update, selectStage,
+    root: group, parcel, cargo, loaders, trucks, incoming, incomingCargo, update, selectStage,
     dispose() {
       if (disposed) return; disposed = true;
+      trucks.forEach(dock=>dock.dispose());incoming.dispose();
       group.traverse((o) => o.geometry?.dispose());
       for (const material of materials) material.dispose();
       for (const texture of textures) texture.dispose();

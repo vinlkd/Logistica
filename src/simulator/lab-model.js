@@ -1,4 +1,10 @@
+import { buildCookwarePacking } from "./cookware-packing.js";
+import {
+  buildCookwareWarehouse,
+  buildCookwareRawAddresses,
+} from "./cookware-warehouse.js";
 import { applyCookwareFinish } from "./cookware-finish.js";
+import { buildMaterialReceiving } from "./industries/material-receiving.js";
 import {
   buildHandleAssembler,
   updateHandleAssembler,
@@ -108,7 +114,7 @@ export function buildLabModel({
       ],
       flat = profile.map(
         (_, i) =>
-          new THREE.Vector2(0.001 + (i / (profile.length - 1)) * 0.619, 0.21),
+          new THREE.Vector2(0.001 + (i / (profile.length - 1)) * 0.619, 0.235),
       );
     const geo = new THREE.LatheGeometry(flat, 48),
       target = new THREE.LatheGeometry(
@@ -128,7 +134,7 @@ export function buildLabModel({
     group.add(body);
     const rim = new THREE.Mesh(new THREE.TorusGeometry(r, 0.012, 8, 48), metal);
     rim.rotation.x = Math.PI / 2;
-    rim.position.y = morph ? 0.21 : h;
+    rim.position.y = morph ? 0.2225 : h;
     group.add(rim);
     const handles = new THREE.Group();
     group.add(handles);
@@ -244,13 +250,13 @@ export function buildLabModel({
       return mesh;
     };
     const dock = ["receiving", "shipping"].includes(id),
-      floorX = dock ? (id === "shipping" ? 5 : -5) : 0;
+      floorX = dock ? (id === "shipping" ? 5 : -5) : id === "packing" ? 4 : 0;
     const floor = box(
       root,
       floorX,
       -0.04,
       0,
-      dock ? 32 : 16,
+      dock ? 32 : id === "packing" ? 24 : 16,
       0.08,
       12,
       mat("#60788b", 0.1, 0.85),
@@ -266,7 +272,6 @@ export function buildLabModel({
       "finished",
       "quality",
       "finishing",
-      "packing",
     ].includes(id)
       ? 0.82
       : 0;
@@ -283,7 +288,7 @@ export function buildLabModel({
         box(root, x, 0.3675, z, 0.12, 0.735, 0.1, m.steel);
     const sensors = {};
     for (const [key, x] of [
-      ["entry", -3.9],
+      ["entry", ["receiving", "industry"].includes(id) ? -1.3 : -3.9],
       ["positioned", -0.45],
       ["exit", 3.8],
     ]) {
@@ -313,10 +318,12 @@ export function buildLabModel({
       guard = null,
       truck = null,
       workstation = null,
+      packingStation = null,
       receiving = null,
       liftSupport = null,
       assembler = null,
       rawLoader = null,
+      warehouse = null,
       ramAnchor = 4.3;
     const clamps = [];
     if (id === "production") {
@@ -365,7 +372,17 @@ export function buildLabModel({
       box(root, 1.64, 3.65, 1.98, 6.4, 0.08, 0.1, m.steel);
       for (const x of [-1.1, 1.1])
         box(guard, x, 1.25, 0, 0.13, 0.14, 0.14, m.dark);
-    } else if (id === "raw" || id === "finished") {
+    } else if (id === "finished") {
+      warehouse = buildCookwareWarehouse({
+        THREE,
+        root,
+        box,
+        cyl,
+        materials: m,
+        product,
+        solid,
+      });
+    } else if (id === "raw") {
       // Addressed central slot has fork lanes between support rails.
       const rear = -3.6 + layout.package.centerZ,
         depth = layout.package.depth + 0.35;
@@ -426,48 +443,30 @@ export function buildLabModel({
           if (id === "finished")
             carton(root, x, 0.83, rear - layout.package.centerZ, 0.9);
         }
-    } else if (id === "packing") {
-      const p = layout.package,
-        front = p.centerZ + p.depth / 2 + p.height + 0.35,
-        back = p.centerZ - p.depth / 2 - p.height - 0.35,
-        roof = CONVEYOR_TOP + p.height + p.depth / 2 + 0.7;
-      for (const x of [-1.85, 1.85])
-        for (const z of [front, back])
-          solid(x, (roof - 0.09) / 2, z, 0.15, roof - 0.09, 0.15);
-      solid(0, roof, back, 3.55, 0.18, 0.2);
-      solid(0, roof, front, 3.55, 0.18, 0.2);
-      for (const x of [-1.85, 1.85])
-        box(
-          root,
-          x,
-          roof,
-          (front + back) / 2,
-          0.15,
-          0.18,
-          front - back + 0.2,
-          m.blue,
-        );
-      // Side guards are outside the entire unfolded blank; both transport ends stay open.
-      for (const z of [front, back])
-        box(root, 0, 2.05, z, 3.5, 2.4, 0.025, m.glass);
-      head = box(
+      warehouse = buildCookwareRawAddresses({
+        THREE,
         root,
-        0,
-        roof + 0.2,
-        p.centerZ,
-        p.width + 0.12,
-        0.13,
-        p.depth + 0.05,
-        m.yellow,
-        true,
-      );
-      ramAnchor = roof + 0.5;
-      for (const x of [-1.85, 1.85])
-        box(root, x, roof + 0.25, p.centerZ, 0.12, 0.5, 0.12, m.steel);
-      box(root, 0, ramAnchor, p.centerZ, 3.85, 0.12, 0.18, m.steel);
-      ram = cyl(root, 0, roof + 0.3, p.centerZ, 0.08, 0.8, m.steel);
-      const spool = cyl(head, 0, 0.36, 0, 0.3, 0.2, m.tape);
-      spool.rotation.z = Math.PI / 2;
+        box,
+        materials: m,
+        layout,
+        positions: RAW_PILE_X,
+        solid,
+      });
+    } else if (id === "packing") {
+      packingStation = buildCookwarePacking({
+        THREE,
+        root,
+        box,
+        cyl,
+        bar,
+        m,
+        product,
+        layout,
+        rollers,
+      });
+      head = packingStation.head;
+      ram = packingStation.ram;
+      ramAnchor = packingStation.ramAnchor;
     } else if (id === "finishing" || id === "quality") {
       workstation = buildWorkstation({
         id,
@@ -482,29 +481,19 @@ export function buildLabModel({
       });
       if (workstation?.panel) workstation.panel.group.position.x = 3.6;
     } else if (id === "receiving" || id === "shipping") {
-      truck = buildTruck({
-        root,
-        THREE,
-        box,
-        cyl,
-        bar,
-        m,
-        shipping: id === "shipping",
-        layout,
-      });
+      if (id === "shipping")
+        truck = buildTruck({
+          root,
+          THREE,
+          box,
+          cyl,
+          bar,
+          m,
+          shipping: id === "shipping",
+          layout,
+        });
       if (id === "receiving")
         receiving = buildReceiving({ root, THREE, box, cyl, bar, m, layout });
-      if (id === "receiving")
-        for (let n = 0; n < 3; n++)
-          for (let j = 0; j < 6; j++)
-            cyl(
-              root,
-              -8 - n * 1.4,
-              CONVEYOR_TOP + CLEARANCE + 0.013 + j * 0.03,
-              0,
-              0.6,
-              0.025,
-            );
     }
     if (id === "finishing")
       assembler = buildHandleAssembler({
@@ -521,7 +510,7 @@ export function buildLabModel({
     const inputs = [],
       outputs = [],
       cargo = [];
-    if (["receiving", "production"].includes(id)) {
+    if (id === "production") {
       if (id === "production") {
         box(root, -5.65, CONVEYOR_TOP - 0.06, 0, 1.35, 0.12, 1.45, m.white);
         for (const dx of [-0.54, 0.54])
@@ -565,21 +554,11 @@ export function buildLabModel({
           inputs.push(disc);
         }
     if (id === "packing") {
-      box(root, 0, 0.77, -4.3, 13, 0.16, 3.3, m.white);
-      for (const x of [-6, -3, 0, 3, 6])
-        for (const z of [-5.65, -2.95])
-          box(root, x, 0.345, z, 0.09, 0.69, 0.09, m.steel);
-      for (let i = 0; i < 8; i++) {
-        const g = new THREE.Group();
-        root.add(g);
-        g.position.set(-5.5 + i * 1.55, 0.85 + CLEARANCE, -4.3);
-        if (id === "packing") carton(g);
-        else {
-          g.position.y += 0.18;
-          pot(g);
-        }
-        outputs.push(g);
-      }
+      const incoming = new THREE.Group();
+      root.add(incoming);
+      incoming.position.set(-4.35, CONVEYOR_TOP + CLEARANCE + 0.18, 0);
+      pot(incoming);
+      inputs.push(incoming);
     }
     if (id === "shipping")
       for (let i = 0; i < 12; i++) {
@@ -641,9 +620,11 @@ export function buildLabModel({
       liftSupport,
       assembler,
       rawLoader,
+      warehouse,
       guard,
       truck,
       workstation,
+      packingStation,
       receiving,
       clamps,
       inputs,
@@ -656,6 +637,24 @@ export function buildLabModel({
     return model;
   }
   const model = build(id);
+  if (id === "receiving") {
+    model.receivingPickup = buildMaterialReceiving(
+      { THREE, root: model.root, box, cyl, bar, materials: m },
+      { kind: "discs", centerZ: layout.package.centerZ },
+    );
+    model.truck = model.receivingPickup.dock;
+    model.rollers = model.rollers.filter((roller) => {
+      if (roller.position.x >= -2.3) return true;
+      roller.traverse((o) => o.geometry?.dispose());
+      roller.removeFromParent();
+      return false;
+    });
+    const dispose = model.receiving.dispose.bind(model.receiving);
+    model.receiving.dispose = () => {
+      dispose();
+      model.receivingPickup.dispose();
+    };
+  }
   let serial = 0;
   model.root.traverse((o) => {
     if (o.isMesh && !o.name) o.name = `${id}/${o.geometry.type}/${serial++}`;
@@ -692,7 +691,20 @@ export function updateLabModel(
       onMotionBlocked(cell.id, hit.name);
     } else model.lastPose = p;
   }
-  if (model.lastRenderX !== null && cell.outputs.motor && !emergency)
+  const receivingOutgoingTravel =
+    cell.id === "receiving" &&
+    cell.phase === "unloading" &&
+    cell.outputs.transfer &&
+    !emergency &&
+    model.lastRenderX !== null
+      ? Math.max(0, p.x - model.lastRenderX)
+      : 0;
+  if (
+    cell.id !== "receiving" &&
+    model.lastRenderX !== null &&
+    cell.outputs.motor &&
+    !emergency
+  )
     for (const r of model.rollers)
       r.rotateY(-(p.x - model.lastRenderX) / 0.075);
   model.lastRenderX = p.x;
@@ -703,7 +715,7 @@ export function updateLabModel(
   model.packed.position.set(p.x, p.support + CLEARANCE, p.z);
   const pot = model.cookware;
   pot.body.morphTargetInfluences[0] = p.form;
-  pot.rim.position.y = 0.21 + (product.height - 0.21) * p.form;
+  pot.rim.position.y = 0.2225 + (product.height - 0.2225) * p.form;
   pot.rim.scale.setScalar((0.62 + (product.rim - 0.62) * p.form) / product.rim);
   if (!model.assembler) {
     pot.handles.visible = p.form > 0.99 && cell.id !== "production";
@@ -733,12 +745,46 @@ export function updateLabModel(
   if (mechanismActive && model.liftSupport)
     updateLiftSupport(model.liftSupport, p);
   if (model.guard) model.guard.position.x = cell.guard ? 0 : 3.1;
+  if (model.receivingPickup) {
+    const receivingKey = JSON.stringify([
+      cell.done,
+      cell.queue,
+      cell.part,
+      cell.phase,
+      cell.progress,
+    ]);
+    if (receivingKey !== model.lastReceivingKey) {
+      model.receivingPickup.update(cell);
+      const transport = model.receivingPickup.state;
+      const feedingTravel =
+        transport &&
+        cell.outputs.motor &&
+        !emergency &&
+        model.lastReceivingTravel?.index === transport.index
+          ? Math.max(
+              0,
+              transport.conveyorTravel - model.lastReceivingTravel.distance,
+            )
+          : 0;
+      const travel =
+        cell.phase === "feeding" ? feedingTravel : receivingOutgoingTravel;
+      if (travel > 0)
+        for (const roller of model.rollers) roller.rotateY(-travel / 0.075);
+      if (transport)
+        model.lastReceivingTravel = {
+          index: transport.index,
+          distance: transport.conveyorTravel,
+        };
+      model.lastReceivingKey = receivingKey;
+    }
+  }
   if (mechanismActive && model.receiving)
     updateReceiving(model.receiving, { cell, product, layout, running });
   if (mechanismActive && model.assembler)
     updateHandleAssembler(model.assembler, { pose: p, cell, product, layout });
   if (!cell.part && model.assembler) model.assembler.handles.visible = false;
   if (mechanismActive && model.rawLoader) updateRawLoader(model.rawLoader, p);
+  if (mechanismActive && model.warehouse) model.warehouse.update(p, cell);
   if (mechanismActive && model.workstation)
     updateWorkstation(model.workstation, {
       pose: p,
@@ -751,9 +797,15 @@ export function updateLabModel(
   if (mechanismActive && model.truck)
     model.truck.lift.position.y =
       cell.id === "shipping" ? p.support - CONVEYOR_TOP : 0;
+  if (mechanismActive && model.packingStation)
+    model.packingStation.update(p, cell);
   const c = model.blank;
   c.group.visible = cell.id === "packing" && cell.part;
-  c.group.position.set(p.x, CONVEYOR_TOP, p.z);
+  c.group.position.set(
+    p.cartonX ?? p.x,
+    p.cartonBase ?? CONVEYOR_TOP,
+    p.cartonZ ?? p.z,
+  );
   for (const wall of c.walls)
     wall.object.rotation[wall.axis] = wall.open * (1 - p.walls);
   for (const flap of c.flaps) {

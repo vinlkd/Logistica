@@ -16,6 +16,7 @@ import {
   buildFurnitureModel,
 } from "../src/simulator/industries/factory-models.js";
 import { buildIndustryStation } from "../src/simulator/industries/station-adapter.js";
+import { createIndustrySession } from "../src/simulator/industries/industry-session.js";
 import { createProcessSimulation } from "../src/simulator/industries/process-engine.js";
 function fixture(definition, build) {
   const materials = Object.fromEntries(
@@ -62,7 +63,7 @@ for (const [definition, build] of [
   [FURNITURE, buildFurnitureModel],
   [PARCELS, buildParcelsModel],
 ]) {
-  test(`${definition.id}: original base stays fixed and station visibility survives revisits`, () => {
+  test(`${definition.id}: station coordinates and visibility survive revisits`, () => {
     const f = fixture(definition, build);
     try {
       const floor = f.base.root.children.find((o) => o.name === "sector-floor");
@@ -73,7 +74,21 @@ for (const [definition, build] of [
         for (const step of definition.steps) {
           f.station.selectStage(step.id);
           f.base.root.updateMatrixWorld(true);
-          assert.equal(f.station.root.position.x, -step.x);
+          assert.ok(
+            Math.abs(
+              f.base.root.position.x + f.station.root.position.x + step.x,
+            ) < 1e-9,
+          );
+          if (
+            definition.id === "beverages" &&
+            ["pack", "seal", "ship"].includes(step.id)
+          )
+            assert.ok(
+              Math.abs(
+                f.base.root.position.x -
+                  (definition.steps.find((s) => s.id === "pack").x - step.x),
+              ) < 1e-9,
+            );
           let n = 0;
           f.station.root.traverse((o) => {
             if (o.isMesh && o.visible && o.parent.visible) n++;
@@ -155,3 +170,84 @@ test("cap feed replaces occupied roller portions while the bottle remains suppor
     f.dispose();
   }
 });
+
+test("pipeline: cada estação mostra sua própria garrafa e não inventa peça na estação vazia", () => {
+  const f = fixture(BEVERAGES, buildBeveragesModel);
+  const settings = Object.fromEntries(
+    BEVERAGES.controls.map((c) => [c.id, c.value]),
+  );
+  const wash = BEVERAGES.steps.find((s) => s.id === "wash");
+  const fill = BEVERAGES.steps.find((s) => s.id === "fill");
+  const station = {
+    scope: "line",
+    phase: "operating",
+    step: wash,
+    progress: 0.3,
+    running: false,
+    settings,
+    done: 0,
+    total: 108,
+    unit: {
+      ...BEVERAGES.initialize(BEVERAGES.products[0]),
+      id: "LOT-001",
+      received: true,
+    },
+    position: { x: wash.x },
+    hasMaterial: true,
+    outputs: { motor: false, work: false, transfer: false },
+  };
+  const state = {
+    ...station,
+    step: fill,
+    unit: { ...station.unit, id: "LOT-002" },
+    stations: { wash: station },
+  };
+  f.station.selectStage("wash");
+  f.station.update(state, 0.1);
+  assert.equal(f.station.model.bottle.visible, true);
+  assert.equal(f.station.model.bottle.position.x, wash.x);
+  f.station.update(
+    { ...state, stations: { wash: { ...station, hasMaterial: false } } },
+    0.1,
+  );
+  assert.equal(f.station.model.bottle.visible, false);
+  f.station.update(state, 0.1);
+  assert.equal(f.station.model.bottle.visible, true);
+  f.dispose();
+});
+
+for (const stage of ["pack", "seal", "ship"])
+  test(`bancada ${stage}: mesa completa fora dos roletes após trocar etapa e restaurar`, () => {
+    const f = fixture(BEVERAGES, buildBeveragesModel);
+    const session = createIndustrySession(BEVERAGES, { onDemand: true });
+    session.enterBench(stage, { quantity: stage === "pack" ? 1 : 9 });
+    const verify = (snapshot) => {
+      f.station.selectStage("ship");
+      f.station.selectStage(stage);
+      f.station.update(snapshot, 0);
+      f.base.root.updateMatrixWorld(true);
+      const table = new THREE.Box3().setFromObject(
+        f.station.model.output.handling,
+      );
+      const rollers = new THREE.Box3();
+      for (const roller of f.base.rollers)
+        rollers.union(new THREE.Box3().setFromObject(roller));
+      assert.ok(
+        table.min.x > rollers.max.x + 0.5,
+        `mesa em ${table.min.x}; fim da esteira em ${rollers.max.x}`,
+      );
+      for (const carton of f.station.model.output.cases)
+        assert.ok(
+          new THREE.Box3().setFromObject(carton.group).min.x > rollers.max.x,
+        );
+    };
+    verify(session.snapshot);
+    session.start();
+    session.tick(0.2);
+    session.pause();
+    verify(session.snapshot);
+    const restored = createIndustrySession(BEVERAGES, { onDemand: true });
+    assert.equal(restored.importState(session.exportState()), true);
+    verify(restored.snapshot);
+    f.dispose();
+  });

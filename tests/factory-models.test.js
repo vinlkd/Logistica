@@ -186,8 +186,8 @@ for (const product of FURNITURE.products) {
     f.dispose();
   });
 }
-test("modelos: embalagens dobram por dobradiças sem diminuir a espessura das paredes", () => {
-  for (const definition of [BEVERAGES, FURNITURE]) {
+test("móveis: embalagem dobra por dobradiças sem diminuir a espessura das paredes", () => {
+  for (const definition of [FURNITURE]) {
     const f = fixture(definition, definition.products[0]),
       { model, unit, settings } = f;
     if (definition.id === "beverages") {

@@ -1,3 +1,6 @@
+import { cookwarePackingPose } from "./cookware-packing.js";
+import { cookwareWarehousePose } from "./cookware-warehouse.js";
+import { receivingPickupPose } from "./receiving-pickup.js";
 import { getRawStock, getNextRawPickup } from "./raw-stock.js";
 import { getProduct } from "./products.js";
 import { CONVEYOR_TOP, CLEARANCE, getLayout, smooth } from "./kinematics.js";
@@ -44,31 +47,6 @@ export function getPresentation(
     if (step === "down") head = s;
     if (step === "draw") head = 1;
     if (step === "up") head = 1 - s;
-  }
-  if (cell.id === "finished" && cell.phase === "processing") {
-    const travel = -3.6;
-    if (step === "raise") lift = 1.64 * s;
-    if (step === "store") {
-      z = travel * smooth(t / 0.4);
-      lift = 1.64 - 0.04 * smooth((t - 0.4) / 0.15);
-      forkZ = t < 0.55 ? z : travel * (1 - smooth((t - 0.55) / 0.45));
-      forkLift = lift;
-    }
-    if (step === "retrieve") {
-      forkZ =
-        t < 0.6
-          ? travel * smooth(t / 0.45)
-          : travel * (1 - smooth((t - 0.6) / 0.4));
-      lift = 1.6 + 0.04 * smooth((t - 0.45) / 0.15);
-      z = t < 0.6 ? travel : forkZ;
-      forkLift = t < 0.45 ? 1.6 : lift;
-    }
-    if (step === "lower") lift = 1.64 * (1 - s);
-    if (!["store", "retrieve"].includes(step)) {
-      forkZ = z;
-      forkLift = lift;
-    }
-    support += lift;
   }
   // After magnetic loading, empty forks approach the shelf before taking load.
   if (cell.id === "raw" && ["feeding", "processing"].includes(cell.phase)) {
@@ -161,6 +139,12 @@ export function getPresentation(
           ? 3.48 * smooth((cell.progress - 0.5) / 0.4)
           : 3.48 + 0.87 * smooth((cell.progress - 0.9) / 0.1)
         : 0;
+  if (cell.id === "receiving" && cell.phase === "feeding") {
+    const pickup = receivingPickupPose(cell);
+    x = pickup.x;
+    z = pickup.z;
+    support = pickup.support;
+  }
   if (cell.id === "raw" && cell.phase === "feeding") {
     const pickupZ = rawStock.pickupZ;
     const pilePlane = rawStock.planeY;
@@ -219,7 +203,10 @@ export function getPresentation(
     }
   }
   const punchBottom =
-    CONVEYOR_TOP + CLEARANCE + (support - CONVEYOR_TOP) * head;
+    CONVEYOR_TOP +
+    CLEARANCE +
+    0.025 * (1 - form) +
+    (support - CONVEYOR_TOP) * head;
   const headY = 3.3 + (punchBottom + 1.15 - 3.3) * head;
   const retractY =
     CONVEYOR_TOP + layout.package.height + layout.package.depth / 2 + 0.92;
@@ -260,5 +247,7 @@ export function getPresentation(
     loaderCaught,
     loaderReleasing,
     layout,
+    ...cookwareWarehousePose(cell, product),
+    ...(packing ? cookwarePackingPose(cell,product) : {}),
   };
 }
