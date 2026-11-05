@@ -37,42 +37,47 @@ export function createLabScene(
   industry = null,
   options = {},
 ) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.95;
+  const circuit = options.circuit;
+  const renderer =
+    circuit?.renderer ?? new THREE.WebGLRenderer({ canvas, antialias: true });
   const scene = new THREE.Scene();
   scene.background = new THREE.Color("#dce4ed");
   scene.fog = new THREE.Fog("#dce4ed", 42, 95);
-  const room = new RoomEnvironment(),
-    pmrem = new THREE.PMREMGenerator(renderer),
+  let env;
+  let cookwareReflection = circuit?.cookwareReflection;
+  if (!circuit) {
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.95;
+    const room = new RoomEnvironment();
+    const pmrem = new THREE.PMREMGenerator(renderer);
     env = pmrem.fromScene(room, 0.04);
-  const cookwareReflection = industry
-    ? null
-    : createCookwareReflection(THREE, pmrem);
-  scene.environment = env.texture;
-  scene.environmentIntensity = 0.75;
-  room.dispose();
-  pmrem.dispose();
-  scene.add(new THREE.HemisphereLight("#dae6f4", "#65717b", 1.7));
-  const sun = new THREE.DirectionalLight("#fff8ec", 3);
-  sun.position.set(-7, 15, 10);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, {
-    left: -18,
-    right: 18,
-    top: 18,
-    bottom: -18,
-    near: 0.1,
-    far: 45,
-  });
-  sun.shadow.normalBias = 0.025;
-  scene.add(sun);
+    if (!industry) cookwareReflection = createCookwareReflection(THREE, pmrem);
+    scene.environment = env.texture;
+    scene.environmentIntensity = 0.75;
+    room.dispose();
+    pmrem.dispose();
+    scene.add(new THREE.HemisphereLight("#dae6f4", "#65717b", 1.7));
+    const sun = new THREE.DirectionalLight("#fff8ec", 3);
+    sun.position.set(-7, 15, 10);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(sun.shadow.camera, {
+      left: -18,
+      right: 18,
+      top: 18,
+      bottom: -18,
+      near: 0.1,
+      far: 45,
+    });
+    sun.shadow.normalBias = 0.025;
+    scene.add(sun);
+  }
   const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 130),
     controls = new OrbitControls(camera, canvas);
+  controls.enabled = !circuit;
   let renderDirty = true;
   controls.addEventListener("change", () => {
     renderDirty = true;
@@ -109,12 +114,12 @@ export function createLabScene(
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = 0;
   ground.receiveShadow = true;
-  scene.add(ground);
+  if (!circuit) scene.add(ground);
   const grid = new THREE.GridHelper(60, 60, "#aabccb", "#bfcedb");
   grid.position.y = 0.002;
   grid.material.transparent = true;
   grid.material.opacity = 0.3;
-  scene.add(grid);
+  if (!circuit) scene.add(grid);
   let product = getProduct("saucepan"),
     layout = getLayout(product.id),
     selected = null,
@@ -173,6 +178,7 @@ export function createLabScene(
             root,
             materials: m,
             environment: industry ? "beverages" : "cookware",
+            circuit: !!circuit,
           }),
         };
         cache.set(warehouseStage, selected);
@@ -206,6 +212,7 @@ export function createLabScene(
           base: selected,
           materials: m,
           ...industry,
+          circuit: !!circuit,
         });
       }
       selected.root.visible = true;
@@ -223,6 +230,7 @@ export function createLabScene(
     setView("front");
   }
   function setView(view) {
+    if (circuit) return;
     const room = selected?.orderWarehouse?.room ?? selected?.room;
     if (room) {
       room.group.visible = true;
@@ -352,6 +360,7 @@ export function createLabScene(
     scene.fog.far = 95;
   }
   function showOverview(environments, onPick) {
+    if (circuit) return;
     if (options.onDemand)
       environments = environments.filter(
         (e) => e.id !== (industry ? "ship" : "shipping"),
@@ -405,7 +414,102 @@ export function createLabScene(
     scene.fog.near = 200;
     scene.fog.far = 600;
   }
+  const batchedModels = new WeakSet();
+  function batchFixedBoxes(model) {
+    if (batchedModels.has(model)) return;
+    batchedModels.add(model);
+    const moving = new Set([
+      ...Object.values(model).filter((value) => value?.isObject3D),
+      ...(model.inputs ?? []), ...(model.outputs ?? []), ...(model.cargo ?? []),
+      ...(model.clamps ?? []).map((entry) => entry.object),
+    ]);
+    const batches = new Map();
+    for (const mesh of model.root.children) {
+      if (!mesh.isMesh || mesh.children.length || !mesh.visible || moving.has(mesh) ||
+          mesh.name === "sector-floor" || mesh.geometry.type !== "BoxGeometry" ||
+          mesh.material.transparent || mesh.material.map) continue;
+      if (!batches.has(mesh.material)) batches.set(mesh.material, []);
+      batches.get(mesh.material).push(mesh);
+    }
+    for (const [material, boxes] of batches) {
+      if (boxes.length < 3) continue;
+      const combined = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), material, boxes.length);
+      combined.castShadow = boxes[0].castShadow;
+      combined.receiveShadow = boxes[0].receiveShadow;
+      boxes.forEach((box, index) => {
+        const { width, height, depth } = box.geometry.parameters;
+        box.updateMatrix();
+        combined.setMatrixAt(index, box.matrix.clone().scale(new THREE.Vector3(width, height, depth)));
+        box.geometry.dispose();
+        box.removeFromParent();
+      });
+      model.root.add(combined);
+    }
+  }
+  let mountedModels = null;
+  let mountedScope;
+  let lastSolidRefresh = -Infinity;
+  let lastCircuitUpdate = -Infinity;
+  let latestCircuitState;
+  const detachReveal = circuit?.world.onReveal(() => {
+    if (latestCircuitState) updateCircuit(latestCircuitState, 0, true);
+  });
+  function updateCircuit(state, dt, revealed = false) {
+    latestCircuitState = state;
+    const now = performance.now();
+    const id = "beverages";
+    const rebuild = !mountedModels || mountedScope !== state.scope;
+    if (!rebuild && !revealed && state.running && now - lastCircuitUpdate < 29) return;
+    lastCircuitUpdate = now;
+    circuit.world.invalidate();
+    if (rebuild) {
+      const current = selected;
+      const currentOrderStage = current?.orderStage;
+      for (const model of cache.values()) model.root.visible = false;
+      mountedModels = new Map();
+      const stages = industry.definition.steps;
+      for (const stage of stages) {
+        select(stage.id, state.scope);
+        if (!mountedModels.has(selected)) {
+          batchFixedBoxes(selected);
+          mountedModels.set(selected, stage.id);
+          circuit.world.mount(id, stage.id, selected.root);
+          selected.orderWarehouse?.room?.setCutaway(true);
+        }
+      }
+      selected = current;
+      if (selected?.orderWarehouse) selected.orderStage = currentOrderStage;
+      mountedScope = state.scope;
+      circuit.world.updateAccess(id, state.scope);
+    }
+    if (industry) circuit.world.updateBeverageCorner(state);
+    for (const [model, stage] of mountedModels) {
+      model.root.visible = true;
+      if (!rebuild && !circuit.world.shouldUpdate(id, stage)) continue;
+      if (model.orderWarehouse) {
+        let warehouseState =
+          industry && state.stations?.seal
+            ? { ...state, ...state.stations.seal }
+            : state;
+        model.orderWarehouse.update(warehouseState);
+      } else if (industry) {
+        const inactive = state.scope === "bench" && state.step.id !== stage;
+        model.industry.update(
+          inactive
+            ? { ...state, hasMaterial: false, running: false, outputs: {} }
+            : state,
+          dt,
+          circuit.beverageTransfer,
+        );
+      }
+    }
+    if (rebuild || revealed || now - lastSolidRefresh >= 230) {
+      circuit.world.refreshSolids(id, rebuild);
+      lastSolidRefresh = now;
+    }
+  }
   function updateOverview(state, dt) {
+    if (circuit) return updateCircuit(state, dt);
     if (!overview) return;
     for (const environment of overview.environments) {
       const model = cache.get(environment.id);
@@ -463,9 +567,9 @@ export function createLabScene(
     camera.aspect = r.width / Math.max(1, r.height);
     camera.updateProjectionMatrix();
   }
-  const observer = new ResizeObserver(resize);
-  observer.observe(canvas.parentElement);
-  resize();
+  const observer = circuit ? null : new ResizeObserver(resize);
+  observer?.observe(canvas.parentElement);
+  if (!circuit) resize();
   canvas.addEventListener("pointerdown", (e) => {
     pointerStart = { x: e.clientX, y: e.clientY };
   });
@@ -505,7 +609,7 @@ export function createLabScene(
     if (hit) onSensorPick(hit.object.userData.signal);
   });
   function update(cell, dt, running, emergency, scope = "bench") {
-    if (overview) return;
+    if (circuit || overview) return;
     if (selected?.orderWarehouse) {
       selected.orderWarehouse.update(
         industry && cell.stations?.seal
@@ -559,10 +663,11 @@ export function createLabScene(
         model.warehouse?.dispose?.();
         model.receiving?.dispose?.();
         for (const material of model.truck?.materials ?? []) material.dispose();
-        scene.remove(model.root);
+        model.root.removeFromParent();
         model.root.traverse((o) => o.geometry?.dispose());
       }
       cache.clear();
+      mountedModels = null;
       const current =
         selected?.orderStage ??
         (industry ? selected?.industry?.stageId : selected?.id);
@@ -574,6 +679,7 @@ export function createLabScene(
       if (current) select(current);
     },
     hotspots() {
+      if (circuit) return [];
       return (
         selected?.orderWarehouse
           ? [
@@ -602,6 +708,7 @@ export function createLabScene(
       });
     },
     render(force = true) {
+      if (circuit) return;
       controls.update();
       if (force || renderDirty) {
         renderer.render(scene, camera);
@@ -609,6 +716,7 @@ export function createLabScene(
       }
     },
     zoom(f) {
+      if (circuit) return;
       camera.position
         .sub(controls.target)
         .multiplyScalar(f)
@@ -616,7 +724,8 @@ export function createLabScene(
       controls.update();
     },
     dispose() {
-      observer.disconnect();
+      detachReveal?.();
+      observer?.disconnect();
       for (const m of cache.values()) {
         m.room?.dispose();
         m.orderWarehouse?.dispose();
@@ -626,7 +735,17 @@ export function createLabScene(
         m.warehouse?.dispose?.();
         m.receiving?.dispose?.();
       }
-      if (industry) {
+      if (circuit) {
+        const materials = new Set();
+        for (const model of cache.values()) {
+          model.root.traverse((object) => {
+            for (const material of [object.material].flat()) if (material) materials.add(material);
+          });
+          model.root.traverse((object) => object.geometry?.dispose());
+          model.root.removeFromParent();
+        }
+        for (const material of materials) { material.map?.dispose(); material.dispose(); }
+      } else if (industry) {
         const geometries = new Set(),
           materials = new Set();
         scene.traverse((object) => {
@@ -639,9 +758,11 @@ export function createLabScene(
         for (const material of materials) material.dispose();
       }
       controls.dispose();
-      renderer.dispose();
-      cookwareReflection?.dispose();
-      env.texture.dispose();
+      if (!circuit) {
+        renderer.dispose();
+        cookwareReflection?.dispose();
+        env.texture.dispose();
+      }
     },
     get camera() {
       return camera;

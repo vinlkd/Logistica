@@ -20,7 +20,8 @@ function illustration(id, color) {
   };
   return `<svg viewBox="0 0 360 220" role="img" aria-label="Ilustração da linha de ${id === "cookware" ? "panelas" : "bebidas"}"><path d="M30 52L172 13L331 68V188H30Z" fill="${color}" opacity=".06"/>${base}${drawings[id]}</svg>`;
 }
-const selected = new URLSearchParams(location.search).get("industry");
+const params = new URLSearchParams(location.search);
+const selected = params.get("industry");
 const known = resolveEnvironment(selected);
 if (selected && !known) {
   history.replaceState(
@@ -30,7 +31,10 @@ if (selected && !known) {
   );
 }
 document.body.classList.toggle("industry-page", !known);
-if (known) {
+if (selected === "beverages" && params.get("planta") === "u") {
+  const { launchCircuitZPreview } = await import("./circuit-z-preview.js");
+  await launchCircuitZPreview("beverages");
+} else if (known) {
   if (selected === "cookware") await import("./cookware-app.js");
   else {
     const { launchIndustry } = await import("./industries/industry-app.js");
@@ -47,7 +51,7 @@ if (known) {
 } else {
   const demo = true;
   document.querySelector("#app").innerHTML =
-    `<div class="hub"><header class="app-header"><img class="hub-logo" src="${import.meta.env.BASE_URL}senai-logo.png" alt="SENAI" width="126" height="48"><div class="brand"><strong>Laboratório de logística</strong><span>${demo ? "Protótipo de demonstração" : "Ambientes de aprendizagem"}</span></div>${demo ? "" : '<button id="hub-logout" class="text-button">Sair</button>'}</header><main class="hub-main"><div class="hub-intro"><p>Um laboratório, dois processos</p><h1>Qual ambiente você quer explorar?</h1><div>Escolha uma linha e conduza suas operações. Você pode voltar aqui a qualquer momento.</div></div><div class="hub-grid">${catalog.map((c) => `<article class="hub-card" data-industry="${c.id}" style="--industry:${c.color}"><div class="hub-art">${illustration(c.id, c.color)}</div><div class="hub-copy"><span>${c.subtitle}</span><h2>${c.name}</h2><p>${c.description}</p><a class="hub-enter" href="?industry=${c.id}" aria-label="Entrar em ${c.name}">Entrar no ambiente <span aria-hidden="true">↗</span></a></div></article>`).join("")}</div><p class="hub-note">Explore o processo, ajuste os parâmetros e observe o resultado de cada decisão.</p></main></div>`;
+    `<div class="hub"><header class="app-header"><img class="hub-logo" src="${import.meta.env.BASE_URL}senai-logo.png" alt="SENAI" width="126" height="48"><div class="brand"><strong>Laboratório de logística</strong><span>${demo ? "Protótipo de demonstração" : "Ambientes de aprendizagem"}</span></div>${demo ? "" : '<button id="hub-logout" class="text-button">Sair</button>'}</header><main class="hub-main"><div class="hub-intro"><p>Um laboratório, dois processos</p><h1>Qual ambiente você quer explorar?</h1><div>Escolha uma linha e conduza suas operações. Você pode voltar aqui a qualquer momento.</div></div><div class="hub-grid">${catalog.map((c) => `<article class="hub-card" data-industry="${c.id}" style="--industry:${c.color}"><div class="hub-art">${illustration(c.id, c.color)}</div><div class="hub-copy"><span>${c.subtitle}</span><h2>${c.name}</h2><p>${c.description}</p><a class="hub-enter" href="?industry=${c.id}${c.id === "beverages" ? "&amp;planta=u" : ""}" aria-label="Entrar em ${c.name}">Entrar no ambiente <span aria-hidden="true">↗</span></a></div></article>`).join("")}</div><p class="hub-note">Explore o processo, ajuste os parâmetros e observe o resultado de cada decisão.</p></main></div>`;
   installHubPreviews(document.querySelector(".hub"));
   document
     .querySelector("#hub-logout")

@@ -1,4 +1,9 @@
 import { getLayout, CONVEYOR_TOP, CLEARANCE } from "./kinematics.js";
+import {
+  BEVERAGE_CIRCUIT_WAREHOUSE_ENTRY,
+  BEVERAGE_CIRCUIT_SEALER_X,
+  beverageCircuitCaseHandoff,
+} from "./industries/beverage-circuit-layout.js";
 export const ORDER_STAGING_CAPACITY = 3;
 export const STORAGE_CAPACITY = 24;
 export const STORAGE_TRANSPORT_Y = 2.75;
@@ -337,7 +342,7 @@ export const getOrderPickPose = (t, box, index = 0) =>
 export const getOrderShipPose = (t, box, index = 0) =>
   orderPose("ship", t, box, index);
 
-export function beverageStorageState(snapshot) {
+export function beverageStorageState(snapshot, { circuit = false } = {}) {
   if (
     snapshot.step?.id !== "seal" ||
     !["moving", "operating"].includes(snapshot.phase) ||
@@ -357,14 +362,19 @@ export function beverageStorageState(snapshot) {
       snapshot.unit.warehouseAddress ??
       `PA-${String(index + 1).padStart(2, "0")}`,
   };
-  if (snapshot.phase !== "operating")
+  if (snapshot.phase !== "operating") {
+    const handoff = circuit ? beverageCircuitCaseHandoff(index, snapshot.progress) : null;
+    if (handoff && !handoff.onWarehouse) return null;
+    const x = handoff
+      ? mix(BEVERAGE_CIRCUIT_WAREHOUSE_ENTRY, BEVERAGE_CIRCUIT_SEALER_X, handoff.beltProgress)
+      : -7.15 + 2.8 * clamp(snapshot.progress);
     return {
       unit,
       quantity,
       index,
       closing: 0,
       pose: {
-        material: point(-7.15 + 2.8 * clamp(snapshot.progress), 1.2, 0),
+        material: point(x, 1.2, 0),
         carriage: point(
           0,
           PARK,
@@ -374,6 +384,7 @@ export function beverageStorageState(snapshot) {
         bank: demandWarehouseSlot(unit.warehouseAddress).bank,
       },
     };
+  }
   const seconds = snapshot.progress * DEMAND_BEVERAGE_STORAGE_DURATION;
   if (seconds < 7)
     return {

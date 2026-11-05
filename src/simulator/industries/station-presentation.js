@@ -1,3 +1,9 @@
+import {
+  beverageCircuitLocal,
+  beverageCircuitNext,
+  beverageCircuitTransition,
+} from "./beverage-circuit-layout.js";
+
 const ease = (v) => {
   v = Math.max(0, Math.min(1, v));
   return v * v * (3 - 2 * v);
@@ -5,7 +11,7 @@ const ease = (v) => {
 // A cell view has a full-size incoming and outgoing conveyor. Logical station
 // distances are mapped to that local conveyor instead of dropping the piece
 // at the centre as soon as the next operation becomes ready.
-export function stationPresentation(snapshot, definition, stageId) {
+export function stationPresentation(snapshot, definition, stageId, { circuit = false } = {}) {
   if (snapshot.stations?.[stageId])
     snapshot = {
       ...snapshot,
@@ -16,6 +22,23 @@ export function stationPresentation(snapshot, definition, stageId) {
   if (snapshot.hasMaterial === false)
     return { state: snapshot, visible: false };
   if (snapshot.scope !== "line") return { state: snapshot, visible: true };
+  if (circuit && definition.id === "beverages") {
+    const { phase, progress, step, unit } = snapshot;
+    if (step.id !== stageId)
+      return { state: snapshot, visible: false };
+    // The destination renders the same bottle over the upstream conveyor.
+    // An outgoing worker still drives its rollers but has no second bottle.
+    const outgoing = phase === "outgoing";
+    const entering = stageId !== "receive" && ["ready", "moving"].includes(phase);
+    const route = !unit?.packed && (outgoing || entering)
+      ? beverageCircuitTransition(outgoing ? beverageCircuitNext(stageId) : stageId, progress)
+      : null;
+    const local = route && beverageCircuitLocal(stageId, route);
+    const position = local
+      ? { ...snapshot.position, x: step.x + local.x, z: local.z, travel: route.travel }
+      : snapshot.position;
+    return { state: { ...snapshot, position }, visible: !outgoing };
+  }
   const index = definition.steps.findIndex((s) => s.id === stageId),
     current = definition.steps.findIndex((s) => s.id === snapshot.step.id),
     stage = definition.steps[index];

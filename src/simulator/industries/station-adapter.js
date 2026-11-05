@@ -1,4 +1,53 @@
 import { stationPresentation } from "./station-presentation.js";
+
+function batchStraightRollers(THREE, base) {
+  const { rollers } = base;
+  const first = rollers[0];
+  if (!first || rollers.some((roller) => roller.children.length !== 1)) return null;
+
+  const group = new THREE.Group();
+  const meshes = [first, first.children[0]].map((source) => {
+    const mesh = new THREE.InstancedMesh(source.geometry, source.material, rollers.length);
+    mesh.castShadow = source.castShadow;
+    mesh.receiveShadow = source.receiveShadow;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    group.add(mesh);
+    return mesh;
+  });
+  base.root.add(group);
+  for (const roller of rollers) roller.removeFromParent();
+  const markerMatrix = new THREE.Matrix4();
+  function sync() {
+    let index = 0;
+    for (const roller of rollers) {
+      if (!roller.visible) continue;
+      const marker = roller.children[0];
+      roller.updateMatrix();
+      marker.updateMatrix();
+      meshes[0].setMatrixAt(index, roller.matrix);
+      meshes[1].setMatrixAt(index, markerMatrix.multiplyMatrices(roller.matrix, marker.matrix));
+      index++;
+    }
+    for (const mesh of meshes) {
+      mesh.count = index;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+  sync();
+  for (const mesh of meshes) mesh.computeBoundingSphere();
+  return {
+    sync,
+    dispose() {
+      group.removeFromParent();
+      for (const mesh of meshes) mesh.dispose();
+      const geometries = new Set(rollers.flatMap((roller) => [
+        roller.geometry, roller.children[0].geometry,
+      ]));
+      for (const geometry of geometries) geometry.dispose();
+    },
+  };
+}
+
 export function buildIndustryStation({
   THREE,
   base,
@@ -6,7 +55,9 @@ export function buildIndustryStation({
   definition,
   product,
   build,
+  circuit = false,
 }) {
+  circuit = circuit && definition.id === "beverages";
   const root = new THREE.Group();
   const baseOriginX = base.root.position.x;
   base.root.add(root);
@@ -58,13 +109,28 @@ export function buildIndustryStation({
     cyl,
     bar,
     stationView: true,
+    circuit,
   });
+  const seam = circuit
+    ? bar(base.root, [5, 1.12, -2.1], [5, 1.12, 1.45], 0.075, m.steel)
+    : null;
+  if (seam) {
+    seam.name = "Rolete de união entre estações";
+    for (const object of base.root.children) {
+      const size = object.geometry?.parameters;
+      if (object.name === "sector-floor" || (size?.width === 15.6 && size.height === 0.002))
+        object.visible = false;
+    }
+  }
   const moving = new Set([model.bottle, model.piece, model.parcel]);
+  const rollerBatch = circuit ? batchStraightRollers(THREE, base) : null;
   const splitRollers = new THREE.Group();
   base.root.add(splitRollers);
   let stageId = definition.steps[0].id,
     lastCuts = "",
     lastReceivingTransport = null,
+    lastReceiverSupport,
+    lastCircuitVisual,
     lastBeltPosition = null;
   function visible(o) {
     for (let p = o; p; p = p.parent) if (!p.visible) return false;
@@ -126,6 +192,7 @@ export function buildIndustryStation({
         start = Math.max(start, b);
       }
     });
+    rollerBatch?.sync();
   }
   function selectStage(id) {
     stageId = id;
@@ -140,8 +207,11 @@ export function buildIndustryStation({
     // machinery puts the sealer's table back over a freshly centred belt.
     base.root.position.x = baseOriginX + conveyorStage.x - stage.x;
     root.position.x = -conveyorStage.x;
+    if (seam) seam.visible = ["receive", "wash", "fill", "label"].includes(id);
     model.selectStage(id);
     fitRollers();
+    lastReceiverSupport = undefined;
+    lastCircuitVisual = undefined;
   }
   selectStage(stageId);
   return {
@@ -152,10 +222,38 @@ export function buildIndustryStation({
     root,
     splitRollers,
     selectStage,
-    update(snapshot, dt) {
-      const presentation = stationPresentation(snapshot, definition, stageId);
+    update(snapshot, dt, beverageTransfer) {
+      const continuous = circuit && snapshot.scope === "line";
+      const presentation = stationPresentation(snapshot, definition, stageId, { circuit: continuous });
       const state = presentation.state;
+      if (continuous) {
+        const incomingCase = stageId === "pack" ? state.caseTransfer : undefined;
+        const visual = JSON.stringify([
+          state.phase, state.progress, state.done, state.bottleTotal ?? state.total,
+          state.unit, state.hasMaterial, state.position, state.running,
+          state.emergency, state.fault, state.outputs, state.settings,
+          stageId === "pack" ? state.completedUnits?.length : undefined,
+          stageId === "pack" ? state.inventory?.lotId : undefined,
+          stageId === "pack" ? state.inventory?.boxes?.length : undefined,
+          incomingCase?.phase, incomingCase?.progress, incomingCase?.unit,
+          incomingCase?.hasMaterial, incomingCase?.outputs,
+        ]);
+        if (visual === lastCircuitVisual) return;
+        lastCircuitVisual = visual;
+      } else lastCircuitVisual = undefined;
+      if (beverageTransfer && model.bottle) model.bottle.rotation.set(0, 0, 0);
       model.update(state, dt);
+      if (continuous && presentation.visible && model.bottle && Number.isFinite(state.position.z))
+        model.bottle.position.z = state.position.z;
+      const handoff = presentation.visible && model.bottle && beverageTransfer?.(stageId, state);
+      if (handoff) {
+        const parent = model.bottle.parent;
+        model.bottle.position.copy(parent.worldToLocal(handoff.point));
+        const inverse = parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+        model.bottle.quaternion.setFromUnitVectors(
+          new THREE.Vector3(0, 1, 0), handoff.normal.applyQuaternion(inverse),
+        );
+      }
       const receiving = model.receiver?.state;
       const packing = model.output?.packingState;
       const receivingTravel =
@@ -184,7 +282,8 @@ export function buildIndustryStation({
       const position = {
         id: state.unit?.id,
         x: state.position.x,
-        visible: presentation.visible,
+        travel: handoff ? handoff.distance : state.position.travel,
+        visible: presentation.visible || (continuous && state.phase === "outgoing" && state.hasMaterial && !state.unit?.packed),
       };
       const beltDelta =
         stageId !== "receive" &&
@@ -193,13 +292,20 @@ export function buildIndustryStation({
         position.visible &&
         lastBeltPosition?.visible &&
         lastBeltPosition.id === position.id
-          ? Math.max(0, position.x - lastBeltPosition.x)
+          ? Math.max(0, Number.isFinite(position.travel) && Number.isFinite(lastBeltPosition.travel)
+            ? position.travel - lastBeltPosition.travel : position.x - lastBeltPosition.x)
           : 0;
       lastBeltPosition = position;
       if (!presentation.visible)
         for (const part of [model.bottle, model.piece, model.parcel])
           if (part) part.visible = false;
-      fitRollers();
+      // The connected stations share a fixed roller profile. Only the dock
+      // lift can enter that profile after the initial fit in selectStage.
+      if (!continuous) fitRollers();
+      else if (stageId === "receive" && receiving?.liftSupport !== lastReceiverSupport) {
+        fitRollers();
+        lastReceiverSupport = receiving?.liftSupport;
+      }
       for (const [key, lamp] of Object.entries(base.lamps))
         lamp.material.emissiveIntensity = (
           key === "red"
@@ -213,8 +319,11 @@ export function buildIndustryStation({
       const travel = conveyorDelta > 0 ? conveyorDelta : beltDelta;
       if (travel > 0)
         for (const roller of base.rollers) roller.rotateY(-travel / 0.075);
+        rollerBatch?.sync();
+      if (seam?.visible && travel > 0) seam.rotateY(-travel / 0.075);
     },
     dispose() {
+      rollerBatch?.dispose();
       model.dispose?.();
       root.traverse((o) => o.geometry?.dispose());
       clearSegments();

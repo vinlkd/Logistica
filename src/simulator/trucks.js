@@ -68,7 +68,7 @@ export function buildTruck({
     wallTop - deck,
     0.07,
     body,
-  );
+  ).userData.cargoSide = true;
   for (let x = -3.2; x < 3.4; x += 0.32)
     box(
       truck,
@@ -79,7 +79,7 @@ export function buildTruck({
       roof - deck - 0.12,
       0.015,
       m.white,
-    );
+    ).userData.cargoSide = true;
   box(
     truck,
     direction * 3.35,
@@ -270,8 +270,8 @@ export function buildTruck({
   for (const z of [-0.58, 0.58])
     box(truck, direction * 3.05, 0.6, z, 0.62, 0.49, 0.045, m.dark);
   // Reflective strips, side underrun guards and front identification lights.
-  box(truck, 0, 1.84, -halfDepth - 0.041, 6.2, 0.09, 0.015, lamp("#e7490f"));
-  box(truck, 0, 3.9, -halfDepth - 0.042, 6.2, 0.22, 0.015, paint);
+  box(truck, 0, 1.84, -halfDepth - 0.041, 6.2, 0.09, 0.015, lamp("#e7490f")).userData.cargoSide = true;
+  box(truck, 0, 3.9, -halfDepth - 0.042, 6.2, 0.22, 0.015, paint).userData.cargoSide = true;
   for (const side of [-1, 1]) {
     box(
       truck,

@@ -4,6 +4,7 @@ import {createMotionAuthorization} from './motion-authorization.js';
 import {bottlePackingState} from './bottle-crate-flow.js';
 import {BOTTLE_PACKING_LAYOUT as layout} from './bottle-packing-layout.js';
 import {buildBottleCaseTransfer,bottleCaseTransferState} from './bottle-case-transfer.js';
+import {BEVERAGE_CIRCUIT_CASE_TARGET_X,beverageCircuitCaseHandoff} from './beverage-circuit-layout.js';
 import {ease} from './factory-helpers.js';
 import {buildTruckDock} from './truck-dock.js';
 import {BOTTLES_PER_CASE,CASE_INNER,bottleCaseSlot,bottleCaseRecords,bottleCasePose,bottleCargoSlot,buildBottleCase,caseSealPose} from './bottle-cases.js';
@@ -38,7 +39,9 @@ export function buildBottlePacking(args){
   box(sealingMachine,sealX+.25,sealFrameY,.975,.12,.12,2.07,m.steel);
   for(const side of [-1,1])for(const axis of ['x','z']){const pusher=box(sealingMachine,0,0,0,.06,.06,.3,m.dark);const drive=cyl(sealingMachine,0,3,0,.018,1,m.steel);pushers.push({mesh:pusher,drive,side,axis});}
   const warehouse=buildBottleWarehouse({...args,root:group},{kind:'finished',x:sealX});
-  const caseTransfer=buildBottleCaseTransfer({...args,root:group},{packX,shipX});
+  const caseTransfer=buildBottleCaseTransfer({...args,root:group},args.circuit
+    ? {packX,shipX:BEVERAGE_CIRCUIT_CASE_TARGET_X,supportMaxX:packX+layout.tableMaxX-.4}
+    : {packX,shipX});
   const shippingDock=buildTruckDock({...args,root:group},{shipping:true,stageId:'ship',x:shipX,upperShelf:true});
   // The broad table replaces the dock's short input conveyor without overlap.
   const short=shippingDock.group.children.find(o=>o.isMesh&&o.geometry.parameters.width===2.4&&o.geometry.parameters.depth===1.45);if(short){short.geometry.dispose();short.removeFromParent();}
@@ -65,24 +68,29 @@ export function buildBottlePacking(args){
     get packingState(){return lastPackingPose;},
     selectStage(id){if(id!==selected){authorizeMotion=createMotionAuthorization();authorizeCaseMotion=createMotionAuthorization();}selected=id;},
     update(s){
-      group.visible=['pack','seal','ship'].includes(args.stationView?selected:s.step?.id);packingMachine.visible=selected==='pack';sealingMachine.visible=['pack','seal'].includes(selected);shippingDock.group.visible=selected==='ship';warehouse.group.visible=selected==='seal';
+      const continuous=args.circuit&&s.scope==='line';
+      group.visible=['pack','seal','ship'].includes(args.stationView?selected:s.step?.id);packingMachine.visible=selected==='pack';sealingMachine.visible=!continuous&&['pack','seal'].includes(selected);shippingDock.group.visible=selected==='ship';warehouse.group.visible=selected==='seal';
       const permission=authorizeMotion(s);
       const records=bottleCaseRecords(s,product),active=records.active,live=new Set();
       const source=s.caseTransfer?.hasMaterial&&s.caseTransfer.unit?.packed?{...s,...s.caseTransfer,caseTransfer:undefined}:s;
-      const casePermission=authorizeCaseMotion(source),sourceId=source.step?.id,targetX=sourceId==='ship'?shipX:sealX,sourceIndex=bottleCaseRecords(source,product).active;
+      const casePermission=authorizeCaseMotion(source),sourceId=source.step?.id,sourceIndex=bottleCaseRecords(source,product).active;
+      const joined=continuous&&sourceId==='seal'&&source.hasMaterial&&source.unit?.packed;
+      const handoff=joined&&source.phase==='moving'?beverageCircuitCaseHandoff(sourceIndex,source.progress):null;
+      const targetX=continuous?BEVERAGE_CIRCUIT_CASE_TARGET_X:sourceId==='ship'?shipX:sealX;
       const approach=['seal','ship'].includes(sourceId)&&source.phase==='moving'&&(sourceId==='seal'||source.scope==='bench'),returning=sourceId==='seal'&&source.scope==='bench'&&source.phase==='outgoing';
-      const caseState=bottleCaseTransferState(approach?source.progress:returning?1-source.progress:source.phase==='ready'?0:1,sourceIndex,targetX,packX);
+      const caseState=bottleCaseTransferState(approach?(handoff?.hoistProgress??source.progress):returning?1-source.progress:source.phase==='ready'?0:1,sourceIndex,targetX,packX);
       if(casePermission.initialize||approach&&casePermission.allows('motor')||returning&&casePermission.allows('transfer')||sourceId==='seal'&&source.phase==='operating'&&casePermission.allows('work'))caseTransfer.update(caseState);
       cases.forEach((item,index)=>{
         const c=records.cases[index]??{index,expected:0,units:[],sealed:false,taped:false,identified:false,shipped:false};
         const stocked=s.onDemand&&s.inventory?.boxes.some(record=>record.lotId===s.inventory.lotId&&record.sourceId===`CASE-${String(index+1).padStart(2,'0')}`);
-        item.group.visible=!stocked&&(!c.shipped||selected==='ship');
+        const delivered=joined&&index===sourceIndex&&(handoff?.onWarehouse||source.phase==='operating');
+        item.group.visible=!stocked&&!delivered&&(!c.shipped||selected==='ship');
         const phaseOutput=s.phase==='moving'?'motor':s.phase==='outgoing'?'transfer':'work';
         const transferActive=['moving','operating','outgoing'].includes(s.phase)&&permission.allows(phaseOutput);
         const external=source!==s&&index===sourceIndex&&source.hasMaterial;
         const output=source.phase==='moving'?'motor':source.phase==='outgoing'?'transfer':'work';
         if(external?(casePermission.initialize||casePermission.allows(output)):(permission.initialize||transferActive||permission.ended('seal')||permission.ended('ship'))){
-          const pose=external&&source.phase==='operating'?{x:sealX,y:1.2,z:0}:bottleCasePose(external?source:s,c,external?sourceIndex:active,definition);item.group.position.set(pose.x,pose.y,pose.z);
+          const pose=joined&&index===sourceIndex?caseState.material:external&&source.phase==='operating'?{x:sealX,y:1.2,z:0}:bottleCasePose(external?source:s,c,external?sourceIndex:active,definition);item.group.position.set(pose.x,pose.y,pose.z);
         }
         const sealing=sourceId==='seal'&&source.phase==='operating'&&index===sourceIndex,progress=sealing?(source.onDemand?Math.min(1,source.progress*(source.step.duration??34.1)/7):sealWarehouseProgress(source.progress,index).closingProgress):c.sealed?1:0;if(permission.initialize||sealing&&casePermission.allows('work')||permission.ended('seal'))item.update(progress,c.expected);
         c.units.forEach((unit,slotIndex)=>{const key=`${index}/${unit.id}`;live.add(key);if(!copies.has(key)){const copy=createCopy(unit);copy.name=`Garrafa encaixotada ${unit.id}`;item.group.add(copy);copies.set(key,copy);}const copy=copies.get(key),slot=bottleCaseSlot(index*9+slotIndex);copy.position.set(slot.x-slot.cx,.04,slot.z-slot.cz);copy.visible=true;

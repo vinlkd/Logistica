@@ -38,10 +38,10 @@ export function bottleCaseTransferState(progress,index,targetX=BOTTLE_SEAL_X,pac
   return {...structuredClone(route.end),stage:'complete',duration:route.duration};
 }
 
-export function buildBottleCaseTransfer({THREE,root,box,cyl,materials:m},{packX=BOTTLE_PACK_X,shipX=BOTTLE_SHIP_X}={}){
+export function buildBottleCaseTransfer({THREE,root,box,cyl,materials:m},{packX=BOTTLE_PACK_X,shipX=BOTTLE_SHIP_X,supportMaxX}={}){
   const group=new THREE.Group();group.name='Transferência de caixas • carro suspenso com garfos';root.add(group);const fixed=[];
   const minX=packX+layout.frameMinX-.3,maxX=shipX+5.2,front=2.75,back=layout.frameMinZ;
-  for(const x of [minX,maxX])for(const z of [front,back])fixed.push(box(group,x,3.13,z,.1,6.26,.1,m.steel));
+  for(const x of [minX,supportMaxX??maxX])for(const z of [front,back])fixed.push(box(group,x,3.13,z,.1,6.26,.1,m.steel));
   for(const z of [front,back])fixed.push(box(group,(minX+maxX)/2,6.32,z,maxX-minX+.12,.12,.12,m.steel));
   const carriage=new THREE.Group();carriage.name='Carro de transferência acionado';group.add(carriage);
   box(carriage,0,6.2,(front+back)/2,.14,.12,front-back+.12,m.accent??m.blue);

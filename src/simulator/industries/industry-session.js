@@ -7,6 +7,7 @@ import {
 import { createProcessSimulation } from "./process-engine.js";
 import { createBeverageLineSimulation } from "./beverage-line-engine.js";
 import { createWarehouseInventory } from "../inventory-orders.js";
+import { beverageCircuitMovementDistance } from "./beverage-circuit-layout.js";
 
 // The original laboratory has independent benches as well as an integrated line.
 // Prepare each bench's incoming material in its expected state, without changing
@@ -112,12 +113,18 @@ export function createIndustrySession(definition, options = {}) {
     if (onDemand) {
       const previousValidate = process.validate;
       const previousDuration = process.operationDuration;
+      const previousMovement = process.movementDistance;
       process = {
         ...process,
         operationDuration(id, unit, context) {
           return id === "seal"
             ? (options.storageDuration ?? 34.1)
             : previousDuration?.(id, unit, context);
+        },
+        movementDistance(context) {
+          return options.movementDistance?.(context)
+            ?? (options.circuit ? beverageCircuitMovementDistance(context) : undefined)
+            ?? previousMovement?.(context);
         },
         validate(id, values, unit) {
           if (id === "ship")
@@ -482,6 +489,8 @@ export function createIndustrySession(definition, options = {}) {
     importState,
     selectEnvironment(id) {
       if (!definition.steps.some((s) => s.id === id)) return;
+      if (options.circuit && mode === "manual" && selected !== id)
+        for (const key of Object.keys(commands)) commands[key] = false;
       selected = id;
       engine.setViewStage?.(id);
       if (onDemand) return true;
@@ -643,7 +652,10 @@ export function createIndustrySession(definition, options = {}) {
           }
         }
       }
-      engine.setManualCommands?.(mode === "manual" ? commands : null);
+      engine.setManualCommands?.(
+        mode === "manual" ? commands : null,
+        options.circuit ? selected : null,
+      );
       let s = engine.status;
       if (mode === "manual" && !s.stations) {
         if (!s.running) return;
@@ -672,6 +684,11 @@ export function createIndustrySession(definition, options = {}) {
       if (engine.status.stations) engine.start();
       else if (engine.snapshot.phase === "ready") perform();
       else engine.start();
+      if (options.circuit && mode === "manual") {
+        this.tick(dt);
+        this.pause();
+        return;
+      }
       engine.setManualCommands?.(null);
       engine.tick(dt);
       engine.pause();

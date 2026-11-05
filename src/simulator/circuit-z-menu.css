@@ -1,0 +1,196 @@
+.z-menu {
+  width: min(376px, calc(100vw - 28px));
+  max-height: calc(100dvh - 28px);
+  overflow-y: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: #fff;
+  color: #192820;
+  box-shadow: 0 20px 70px #11201955;
+  font:
+    16px/1.45 "Segoe UI",
+    sans-serif;
+}
+.z-menu::backdrop {
+  background: #14241b77;
+  backdrop-filter: blur(5px);
+}
+.z-menu header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #dce5df;
+}
+.z-menu header strong {
+  color: #151a20;
+}
+.z-menu header span {
+  color: #52675a;
+  font-size: 13px;
+}
+.z-menu-content {
+  padding: 18px 20px 20px;
+}
+.z-menu h2 {
+  margin: 0 0 18px;
+  font-size: 23px;
+}
+.z-menu h3 {
+  margin: 23px 0 7px;
+  font-size: 15px;
+  color: #475c4f;
+}
+.z-menu p {
+  margin: 0 0 16px;
+  color: #475c4f;
+}
+.z-menu button {
+  padding: 12px 14px;
+  border: 1px solid #b8cde9;
+  border-radius: 6px;
+  background: white;
+  color: #151a20;
+  font: inherit;
+  cursor: pointer;
+}
+.z-menu button:focus-visible {
+  outline: 2px solid #2569ba;
+  outline-offset: 3px;
+}
+.z-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.z-menu .z-menu-enter,
+.z-menu button[aria-pressed="true"] {
+  background: #175cb1;
+  color: white;
+  border-color: #175cb1;
+  font-weight: 650;
+}
+.z-menu .z-menu-enter {
+  width: 100%;
+  min-height: 44px;
+}
+.z-menu nav {
+  margin-top: 18px;
+  border-top: 1px solid #dce5df;
+}
+.z-menu nav button {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid #dce5df;
+  border-radius: 0;
+  padding-inline: 4px;
+}
+.z-menu nav button:hover {
+  background: #f0f5fd;
+}
+.z-menu nav span {
+  color: #52675a;
+  font-size: 25px;
+}
+.z-menu .z-menu-back {
+  border: 0;
+  color: #151a20;
+  padding: 0 0 12px;
+}
+.z-menu-grid,
+.z-menu-speed {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+}
+.z-menu-speed {
+  grid-template-columns: repeat(3, 1fr);
+}
+.z-menu ul,
+.z-menu ol {
+  padding: 0;
+  margin: 0;
+  list-style-position: inside;
+}
+.z-menu li {
+  padding: 7px 0;
+  border-bottom: 1px solid #dce5df;
+}
+.z-menu li span {
+  float: right;
+  color: #52675a;
+}
+.z-menu time {
+  color: #52675a;
+  font-variant-numeric: tabular-nums;
+}
+.z-menu dt {
+  color: #52675a;
+}
+.z-menu dd {
+  margin: 0 0 12px;
+}
+.circuit-z.z-look-locked::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 0 1px #15222a99;
+  pointer-events: none;
+}
+
+.z-menu .z-help li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 12px;
+}
+.z-help kbd {
+  display: inline-block;
+  min-width: 1.8em;
+  padding: 2px 6px;
+  border: 1px solid #cddaea;
+  border-radius: 4px;
+  background: #edf3fb;
+  color: #20466e;
+  text-align: center;
+  font:
+    650 14px/1.6 "Segoe UI",
+    sans-serif;
+}
+.z-menu .z-help-note {
+  margin: 16px 0 0;
+  font-size: 14px;
+}
+.z-station-balloon {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -100%);
+  border: 1px solid #c8dcf5;
+  border-radius: 5px;
+  background: #f1f6ff;
+  color: #14386a;
+  padding: 6px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.z-menu .z-menu-emergency {
+  width: 100%;
+  margin-top: 8px;
+  background: #a91e26;
+  border-color: #a91e26;
+  color: white;
+}

@@ -575,6 +575,7 @@ export function buildLabModel({
         cargo.push(g);
       }
     const hmi = new THREE.Group();
+    hmi.userData.inactiveMonitor = true;
     hmi.position.set(4.5, 0, 2.2);
     root.add(hmi);
     bar(hmi, [0, 0, 0], [0, 1.7, 0], 0.06);

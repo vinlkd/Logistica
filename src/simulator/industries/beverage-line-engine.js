@@ -28,7 +28,8 @@ export function createBeverageLineSimulation(definition, options = {}) {
     history,
     completedUnits,
     sealedCases,
-    manualCommands = null;
+    manualCommands = null,
+    manualStage = null;
   const durations = new Map();
   const blank = (step) => ({
     id: step.id,
@@ -149,7 +150,7 @@ export function createBeverageLineSimulation(definition, options = {}) {
     } else {
       w.phase = "blocked";
       w.progress = 1;
-      transfer(index);
+      if (!manualStage || manualCommands?.transfer) transfer(index);
     }
   }
   function quantum(dt) {
@@ -159,6 +160,7 @@ export function createBeverageLineSimulation(definition, options = {}) {
     for (let index = workers.length - 1; index >= 0; index--) {
       const w = workers[index];
       if (!w.unit) continue;
+      if (manualStage && w.id !== manualStage) continue;
       if (blocked(w)) {
         if (!manualCommands || manualCommands.transfer) transfer(index);
         continue;
@@ -484,8 +486,9 @@ export function createBeverageLineSimulation(definition, options = {}) {
     exportState,
     importState,
     reset,
-    setManualCommands(value) {
+    setManualCommands(value, stage = null) {
       manualCommands = value ? copy(value) : null;
+      manualStage = value ? stage : null;
     },
     setViewStage(id) {
       if (definition.steps.some((s) => s.id === id)) selected = id;

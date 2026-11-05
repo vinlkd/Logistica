@@ -20,10 +20,12 @@ export function buildDemandWarehouse({
   root,
   materials: m,
   environment = "cookware",
+  circuit = false,
 }) {
+  const continuous = circuit && environment === "beverages";
   const group = new THREE.Group();
   root.add(group);
-  group.position.y=.025;
+  group.position.y = continuous ? 0 : 0.025;
   group.name = "Armazém e pedidos • estoque real permanente";
   const own = new Set(),
     labels = [];
@@ -81,6 +83,7 @@ export function buildDemandWarehouse({
     }
     const o = box(group, x, y, z, w, h, 0.035, mat);
     o.name = text;
+    o.userData.physicalSign = true;
     return o;
   }
   const floorMat = new THREE.MeshStandardMaterial({
@@ -126,15 +129,20 @@ export function buildDemandWarehouse({
   label("SEPARAÇÃO E CONFERÊNCIA", 10.6, 2.6, -1.9, 4.4, 0.35);
   label("DOCA • EXPEDIÇÃO POR PEDIDO", 20.1, 3.6, -2.0, 4.4, 0.35);
   // Incoming belt has an open central fork lane; packages rest on roller tops.
+  const incomingRollers = [];
+  const beltStart = continuous ? -7.42 : -8.9;
+  const firstRoller = continuous ? -7.3 : -8.5;
+  const beltEnd = 1.1;
   for (const z of [-1.45, 1.45]) {
-    box(group, -3.9, 1.05, z, 10, 0.16, 0.12, m.dark);
-    for (const x of [-8, -5, -2, 0.8])
+    box(group, (beltStart + beltEnd) / 2, 1.05, z, beltEnd - beltStart, 0.16, 0.12, m.dark);
+    for (const x of [continuous ? firstRoller : -8, -5, -2, 0.8])
       box(group, x, 0.5, z, 0.1, 1, 0.1, m.steel);
   }
-  for (let x = -8.5; x < 1; x += 0.3) {
+  for (let x = firstRoller; x < 1; x += 0.3) {
     if (Math.abs(x) < 0.36) continue;
     const roller = cyl(group, x, 1.125, 0, 0.075, 2.8, m.steel);
     roller.rotation.x = Math.PI / 2;
+    incomingRollers.push(roller);
   }
   const banks = [-1, 1].map((sign, bank) => {
     const mast = sign * 2.7;
@@ -307,7 +315,7 @@ export function buildDemandWarehouse({
       box(frame, x, 3.5, 0, 0.12, 0.12, 3.5, m.steel);
     for (const z of [-1.02, 1.02])
       box(frame, 0, 2.42, z, 2.3, 0.08, 0.08, m.steel);
-    const arms = [];
+    const arms = [], drives = [];
     for (const side of [-1, 1])
       for (const minor of [true, false]) {
         const pivot = new THREE.Group();
@@ -332,6 +340,7 @@ export function buildDemandWarehouse({
             m.blue,
           );
           drive.rotation.x = Math.PI / 2;
+          drives.push({ mesh: drive, y: drive.position.y });
         } else {
           box(pivot, edge, normal, -side * 0.34, 0.05, 0.04, 0.68, m.steel);
           box(pivot, 0.76, normal, -side * 0.65, 0.22, 0.04, 0.08, m.dark);
@@ -345,8 +354,9 @@ export function buildDemandWarehouse({
             m.blue,
           );
           drive.rotation.z = Math.PI / 2;
+          drives.push({ mesh: drive, y: drive.position.y });
         }
-        arms.push({ pivot, minor, side });
+        arms.push({ pivot, minor, side, y: pivot.position.y });
       }
     const roller = cyl(frame, -0.65, 3.32, 0, 0.09, 0.14, m.dark);
     roller.rotation.x = Math.PI / 2;
@@ -355,10 +365,18 @@ export function buildDemandWarehouse({
       paper = box(frame, 0.25, 2.866, 1.3, 0.38, 0.006, 0.3, m.white);
     return {
       frame,
-      update(t) {
+      update(t, incomingOnBelt = false) {
         const p = caseSealPose(t),
           returnArms = Math.max(0, Math.min(1, (t - 0.94) / 0.06));
+        // In the joined line the open carton approaches sideways along X.
+        // Keep the folding paddles above its envelope until it is centred.
+        const clamp = (value) => Math.max(0, Math.min(1, value));
+        const lift = continuous
+          ? 0.95 * (incomingOnBelt ? 1 : 1 - clamp(t / 0.04) + clamp((t - 0.97) / 0.03))
+          : 0;
+        for (const drive of drives) drive.mesh.position.y = drive.y + lift;
         for (const a of arms) {
+          a.pivot.position.y = a.y + lift;
           const amount = 1 - p[a.minor ? "minor" : "major"] + returnArms;
           const angle =
             (((a.minor ? -a.side : a.side) * Math.PI) / 2) *
@@ -395,10 +413,12 @@ export function buildDemandWarehouse({
   }
   if (environment === "beverages") {
     sealer = createSealer();
-    sealer.update(0);
+    sealer.update(0, continuous);
   }
+  let previousBeltCase;
   function activeIncoming(snapshot) {
-    if (environment === "beverages") return beverageStorageState(snapshot);
+    if (environment === "beverages")
+      return beverageStorageState(snapshot, { circuit: continuous });
     const cell = snapshot.cells?.find((c) => c.id === "finished");
     if (!cell?.unit) return null;
     return {
@@ -472,6 +492,15 @@ export function buildDemandWarehouse({
         key = src?.unit
           ? `${src.unit.id}/${src.unit.product}/${src.quantity}`
           : "";
+      if (continuous) {
+        const p = src?.pose?.material;
+        const onBelt = p?.z === 0 && p.y === 1.2 && p.x <= 0;
+        if (onBelt && snapshot.running && previousBeltCase?.key === key) {
+          const travel = Math.max(0, p.x - previousBeltCase.x);
+          if (travel > 0) for (const roller of incomingRollers) roller.rotateY(-travel / 0.075);
+        }
+        previousBeltCase = onBelt ? { key, x: p.x } : undefined;
+      }
       if (src?.pose) {
         if (key !== lastIncomingKey) {
           if (incoming) {
@@ -488,7 +517,7 @@ export function buildDemandWarehouse({
         position(incoming, src.pose.material);
         incoming.visible = true;
         incoming.userData.incomingCase?.update(src.closing, src.quantity);
-        sealer?.update(src.closing);
+        sealer?.update(src.closing, snapshot.phase === "moving");
         banks[
           src.pose.bank ?? demandWarehouseSlot(src.unit.warehouseAddress).bank
         ].update(src.pose.carriage, warehouseBoxSize(src.unit.product), src.pose.forkDepth ?? .1);

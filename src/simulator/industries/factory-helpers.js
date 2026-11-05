@@ -90,7 +90,8 @@ export function buildIndustryBase(args) {
   }
   for (const step of definition.steps) {
     const plate = box(root, step.x, 0.04, -2.8, 0.3, 0.08, 0.3, m.dark);
-    bar(root, [step.x, 0.08, -2.8], [step.x, 2.8, -2.8], 0.025, m.steel);
+    const post = bar(root, [step.x, 0.08, -2.8], [step.x, 2.8, -2.8], 0.025, m.steel);
+    post.userData.physicalSign = plate.userData.physicalSign = true;
     const canvas = globalThis.document?.createElement("canvas");
     if (canvas) {
       canvas.width = 512;
@@ -108,6 +109,7 @@ export function buildIndustryBase(args) {
         const material = new THREE.MeshBasicMaterial({ map: texture });
         const sign = box(root, step.x, 2.8, -2.8, 1.4, 0.4, 0.035, material);
         sign.userData.ownedTexture = texture;
+        sign.userData.physicalSign = true;
       }
     }
     plate.name = `Apoio da placa ${step.label}`;

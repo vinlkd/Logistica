@@ -1,0 +1,375 @@
+.circuit {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #9aafba;
+  font-family: "Segoe UI", sans-serif;
+}
+.circuit-view {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+.circuit-view:focus {
+  outline: none;
+}
+.circuit-home,
+.circuit-operate {
+  color: #fff;
+  background: #243b4c;
+  border: 1px solid #ffffff70;
+  border-radius: 6px;
+}
+.circuit-home {
+  position: absolute;
+  top: max(1rem, env(safe-area-inset-top));
+  left: max(1rem, env(safe-area-inset-left));
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  font:
+    34px/1 "Segoe UI",
+    sans-serif;
+  text-decoration: none;
+}
+.circuit-operate {
+  position: absolute;
+  left: 50%;
+  bottom: max(1.65rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  padding: 0.65rem 0.85rem;
+  font:
+    600 0.95rem "Segoe UI",
+    sans-serif;
+  cursor: pointer;
+  box-shadow: 0 3px 12px #14252d4d;
+}
+.circuit-operate kbd {
+  display: inline-block;
+  min-width: 1.5rem;
+  margin-right: 0.55rem;
+  padding: 0.12rem 0.28rem;
+  border-radius: 3px;
+  color: #182b36;
+  background: #f6c154;
+}
+.circuit.panel-open .circuit-operate {
+  display: none;
+}
+.circuit-panel {
+  --modal-size: min(720px, calc(100vw - 32px), calc(100dvh - 32px));
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  padding: 0;
+  width: var(--modal-size);
+  height: var(--modal-size);
+  max-width: none;
+  max-height: none;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: 68px minmax(0, 1fr);
+  overflow: hidden;
+  background: #101923;
+  color: #e5eef5;
+  border: 1px solid #51616e;
+  border-radius: 16px;
+  box-shadow:
+    0 24px 100px #0009,
+    0 0 0 5px #18232db3;
+}
+.circuit-panel[hidden],
+.circuit-panel:not([open]) {
+  display: none;
+}
+.circuit-panel::backdrop {
+  background: #050b12b5;
+}
+.circuit-panel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px 12px 22px;
+  border-bottom: 1px solid #33434e;
+  background: #16232d;
+}
+.circuit-panel-bar div {
+  display: grid;
+  gap: 4px;
+}
+.circuit-panel-bar span {
+  color: #91a7b8;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 10px;
+}
+.circuit-panel-bar strong {
+  color: #eff5f8;
+  font-size: 18px;
+  font-weight: 600;
+}
+.circuit-panel-bar button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border: 1px solid #435767;
+  border-radius: 9px;
+  color: #e9f2f6;
+  background: #22333f;
+  font-size: 26px;
+  cursor: pointer;
+}
+.circuit-panel-bar button:hover {
+  background: #354b59;
+}
+.circuit-frames {
+  min-height: 0;
+  overflow: hidden;
+}
+.circuit-frames iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #101923;
+}
+.circuit-frames iframe[hidden] {
+  display: none;
+}
+.circuit :focus-visible {
+  outline: 2px solid #f6c154;
+  outline-offset: 2px;
+}
+.circuit-fallback {
+  max-width: 36rem;
+  margin: 3rem auto;
+  padding: 1rem;
+}
+
+body.circuit-controls {
+  --panel: #121e28;
+  --panel-soft: #192936;
+  --border: #344854;
+  --text: #e1ebf2;
+  --muted: #9aafbe;
+  --blue: #5ebdff;
+  --green: #54bd8b;
+  --orange: #ed9c43;
+  overflow: auto !important;
+  min-width: 0;
+  color: var(--text);
+  background: #101923;
+  color-scheme: dark;
+  scrollbar-color: #466071 #111e28;
+}
+.circuit-controls #app,
+.circuit-controls .workspace,
+.circuit-controls .laboratory,
+.circuit-controls .inspector {
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  overflow: visible !important;
+}
+.circuit-controls .app-header {
+  min-height: 52px;
+  height: auto;
+  padding: 12px 20px;
+  background: #111c25;
+  color: var(--text);
+  border-color: var(--border);
+}
+.circuit-controls .app-header img {
+  max-height: 26px;
+  width: auto;
+  filter: brightness(0) invert(1);
+}
+.circuit-controls .brand,
+.circuit-controls .brand strong {
+  color: #cedde7;
+  font-size: 12px;
+}
+.circuit-controls .header-context,
+.circuit-controls .viewport,
+.circuit-controls .environment-picker,
+.circuit-controls .process-strip,
+.circuit-controls #toggle-panel,
+.circuit-controls .follow-stages,
+.circuit-controls .circuit-hidden-control,
+.circuit-controls .learning-panel {
+  display: none !important;
+}
+.circuit-controls .simulation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  height: auto;
+  padding: 14px 20px;
+  background: #162630;
+  border-color: var(--border);
+}
+.circuit-controls .inspector {
+  background: var(--panel);
+  color: var(--text);
+  border: 0;
+}
+.circuit-controls .inspector-tabs {
+  background: #111d27;
+  border-color: var(--border);
+  padding: 0 16px;
+}
+.circuit-controls .inspector-tabs button {
+  color: #9fb6c6;
+}
+.circuit-controls .inspector-tabs button[aria-selected="true"] {
+  color: #6ed6a3;
+}
+.circuit-controls .inspector-tabs button[aria-selected="true"]::after {
+  background: #6ed6a3;
+}
+.circuit-controls .inspector-panel:not([hidden]) {
+  display: block !important;
+  overflow: visible !important;
+  padding: 20px;
+}
+.circuit-controls h2,
+.circuit-controls .panel-heading,
+.circuit-controls label,
+.circuit-controls strong {
+  color: #deebf3;
+}
+.circuit-controls h2 {
+  font-size: 14px;
+}
+.circuit-controls .muted,
+.circuit-controls .product-note,
+.circuit-controls .warehouse-capacity {
+  color: #9ab1c1;
+}
+.circuit-controls button,
+.circuit-controls select,
+.circuit-controls input {
+  color: #e2edf4;
+  border-color: #3b5261;
+  border-radius: 7px;
+  background: #1c2e3b;
+}
+.circuit-controls button {
+  min-height: 35px;
+}
+.circuit-controls button:not(:disabled):hover {
+  background: #2a4454;
+  border-color: #6e8e9f;
+}
+.circuit-controls button.primary {
+  background: #176443;
+  color: #f1fff7;
+  border-color: #409e72;
+}
+.circuit-controls button.primary:not(:disabled):hover {
+  background: #237d57;
+}
+.circuit-controls .product-options {
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+}
+.circuit-controls .product-options button {
+  color: #b8cedd;
+  background: #182b38;
+  border-color: #3a5264;
+}
+.circuit-controls .product-options button[aria-pressed="true"] {
+  color: #d9ffeb;
+  background: #203f35;
+  border-color: #5cb88a;
+  box-shadow: inset 3px 0 #5cb88a;
+}
+.circuit-controls .panel-section,
+.circuit-controls .inspector-summary {
+  border-color: #344854;
+  background: transparent;
+}
+.circuit-controls .warehouse-counts > div,
+.circuit-controls .warehouse-transfer {
+  background: #1b2c39;
+  border-color: #385163;
+}
+.circuit-controls .warehouse-counts strong {
+  color: #80d7b0;
+}
+.circuit-controls .warehouse-order strong,
+.circuit-controls .warehouse-notice {
+  color: #b4d2e6;
+}
+.circuit-controls .warehouse-order {
+  border-color: #344854;
+}
+.circuit-controls .warehouse-order-status {
+  color: #b7d9ef;
+  background: #243e51;
+}
+.circuit-controls .safety-area {
+  border-color: #344854;
+}
+.circuit-controls #emergency {
+  background: #632a33;
+  border-color: #ac5060;
+  color: #fff;
+}
+.circuit-controls #acknowledge {
+  background: #5b4c24;
+  color: #f5e5b6;
+}
+.circuit-controls .statusbar {
+  position: static;
+  flex-wrap: wrap;
+  height: auto;
+  background: #101923;
+  color: #9eb6c6;
+  border-color: #344854;
+  padding: 12px 20px;
+}
+.circuit-controls .statusbar b,
+.circuit-controls #global-status {
+  color: #deebf4;
+}
+.circuit-controls dialog {
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  color: #e1ebf2;
+  background: #15232e;
+  border-color: #506b7d;
+}
+.circuit-controls :focus-visible {
+  outline: 2px solid #7ad7ac;
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .circuit-panel {
+    --modal-size: min(calc(100vw - 20px), calc(100dvh - 20px));
+    border-radius: 12px;
+  }
+  .circuit-panel-bar {
+    padding-left: 14px;
+  }
+  .circuit-panel-bar strong {
+    font-size: 16px;
+  }
+  .circuit-controls .simulation-toolbar,
+  .circuit-controls .inspector-panel:not([hidden]) {
+    padding: 12px;
+  }
+  .circuit-operate {
+    max-width: calc(100vw - 24px);
+  }
+}
