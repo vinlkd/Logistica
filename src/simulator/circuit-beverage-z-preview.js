@@ -1,5 +1,4 @@
-// Isolated spatial proposal. This module does not import or run production.
-// Connector points are demonstration belt surfaces, not real handoffs.
+// Isolated spatial proposal. Connector paths match the visible equipment in the preview.
 export function beverageZPreviewPlan() {
   const wallHeight = 4.8;
   const deckY = wallHeight + 0.16;
@@ -46,29 +45,54 @@ export function beverageZPreviewPlan() {
       {
         from: "receive",
         to: "wash",
+        kind: "belt",
         demonstrationOnly: true,
         points: [
-          [-20.925, deckY + beltY, -29.5],
-          [-1, deckY + beltY, -29.5],
+          [-21.2, deckY + beltY, -29.5],
+          [-0.8, deckY + beltY, -29.5],
+        ],
+      },
+      {
+        from: "wash",
+        to: "fill",
+        kind: "rollers",
+        floorY: deckY,
+        points: [
+          [8.8, deckY + beltY, -29.5],
+          [9.2, deckY + beltY, -29.5],
+        ],
+      },
+      {
+        from: "fill",
+        to: "cap",
+        kind: "rollers",
+        floorY: deckY,
+        points: [
+          [18.8, deckY + beltY, -29.5],
+          [19.2, deckY + beltY, -29.5],
         ],
       },
       {
         from: "cap",
         to: "label",
+        kind: "belt",
         demonstrationOnly: true,
         points: [
-          [29, deckY + beltY, -29.5],
+          [28.8, deckY + beltY, -29.5],
           [turnX, deckY + beltY, -29.5],
           [turnX, beltY, outboundZ],
-          [labelX + 5, beltY, outboundZ],
+          [labelX + 4.8, beltY, outboundZ],
         ],
       },
       {
         from: "label",
         to: "pack",
-        demonstrationOnly: true,
-        empty: true,
-        points: [[labelX - 5.075, beltY, outboundZ], [packX + 5, beltY, outboundZ]],
+        kind: "rollers",
+        floorY: 0,
+        points: [
+          [labelX - 4.8, beltY, outboundZ],
+          [packX + 4.8, beltY, outboundZ],
+        ],
       },
     ],
     gates: [

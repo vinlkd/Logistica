@@ -71,6 +71,16 @@ function visible(o) {
   for (let p = o; p; p = p.parent) if (!p.visible) return false;
   return true;
 }
+test("troca de estação oculta a doca antes do ajuste dos roletes", () => {
+  const f = fixture();
+  f.model.selectStage("wash");
+  assert.equal(f.model.receiver.group.visible, false);
+  f.model.selectStage("fill");
+  assert.equal(f.model.receiver.group.visible, false);
+  f.model.selectStage("receive");
+  assert.equal(f.model.receiver.group.visible, true);
+  f.model.dispose();
+});
 function obb(o) {
   if(!o.geometry.boundingBox)o.geometry.computeBoundingBox();
   const b = new OBB().fromBox3(o.geometry.boundingBox);

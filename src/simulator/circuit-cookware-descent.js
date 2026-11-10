@@ -59,6 +59,7 @@ export function buildDemoConveyor(
     supportFloor = () => 0,
     headClearance = 2,
     sideGuides = false,
+    driveRollers = false,
     startDistance = 0,
   },
 ) {
@@ -78,8 +79,11 @@ export function buildDemoConveyor(
       .clone()
       .sub(samples[Math.max(0, index - 1)])
       .normalize();
-    const across = new THREE.Vector3(direction.z, 0, -direction.x).normalize();
-    return { point, across, direction };
+    const across = new THREE.Vector3(0, 1, 0).cross(direction);
+    if (across.lengthSq() < 1e-8) across.set(1, 0, 0);
+    across.normalize();
+    const normal = direction.clone().cross(across).normalize();
+    return { point, across, direction, normal };
   });
   const vertices = [];
   const indices = [];
@@ -192,6 +196,28 @@ export function buildDemoConveyor(
     );
   const total = distances.at(-1);
   let travelled;
+  let rollerAngle = 0;
+  const drivenRollers = [];
+  let rollerBatch;
+  if (driveRollers) {
+    const rollerGeometry = new THREE.CylinderGeometry(0.075, 0.075, 0.82, 10);
+    rollerBatch = new THREE.InstancedMesh(rollerGeometry, railMaterial, Math.floor(total / 0.3));
+    rollerBatch.name = "Roletes de acionamento da correia inclinada";
+    const matrix = new THREE.Matrix4(), axis = new THREE.Vector3(0, 1, 0);
+    for (let distance = 0.15; distance < total - 0.15; distance += 0.3) {
+      const index = Math.max(1, distances.findIndex((at) => at >= distance));
+      const fraction = (distance - distances[index - 1]) / (distances[index] - distances[index - 1]);
+      const point = samples[index - 1].clone().lerp(samples[index], fraction);
+      const across = frames[index - 1].across;
+      const orientation = new THREE.Quaternion().setFromUnitVectors(axis, across);
+      point.addScaledVector(frames[index - 1].normal, -0.075);
+      rollerBatch.setMatrixAt(drivenRollers.length, matrix.compose(point, orientation, new THREE.Vector3(1, 1, 1)));
+      drivenRollers.push({ point, orientation });
+    }
+    rollerBatch.count = drivenRollers.length;
+    rollerBatch.instanceMatrix.needsUpdate = true;
+    group.add(rollerBatch);
+  }
   function clipLoad(polygon, axis, boundary, sign) {
     const inside = [];
     for (let i = 0; i < polygon.length; i++) {
@@ -204,8 +230,21 @@ export function buildDemoConveyor(
     }
     return inside;
   }
-  function update(dt) {
+  function update(dt, running = true) {
+    if (running && rollerBatch) {
+      rollerAngle += dt * 4.2;
+      const spin = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        -rollerAngle,
+      );
+      const scale = new THREE.Vector3(1, 1, 1), matrix = new THREE.Matrix4();
+      drivenRollers.forEach(({ point, orientation }, index) =>
+        rollerBatch.setMatrixAt(index, matrix.compose(point, orientation.clone().multiply(spin), scale)),
+      );
+      rollerBatch.instanceMatrix.needsUpdate = true;
+    }
     const previous = travelled;
+    if (!running) return false;
     travelled = Math.min(total - 0.29, travelled + dt * 1.4);
     let index = distances.findIndex((distance) => distance >= travelled);
     index = Math.max(1, index);
@@ -217,7 +256,10 @@ export function buildDemoConveyor(
       .clone()
       .lerp(frames[index].direction, fraction)
       .normalize();
-    const across = new THREE.Vector3(direction.z, 0, -direction.x).normalize();
+    const across = frames[index - 1].across
+      .clone()
+      .lerp(frames[index].across, fraction)
+      .normalize();
     const up = direction.clone().cross(across).normalize();
     load.quaternion.setFromRotationMatrix(
       new THREE.Matrix4().makeBasis(across, up, direction),

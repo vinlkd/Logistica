@@ -167,9 +167,11 @@ export function stationModel(args, model) {
   let selected = definition.steps[0].id;
   const filter = () =>
     root.children.forEach((child) => {
+      const stageVisibility = model.stageVisibility?.(child, selected);
       child.visible =
-        visible.get(child) !== false &&
-        (moving.has(child) || ownership.get(child) === selected);
+        stageVisibility ??
+        (visible.get(child) !== false &&
+          (moving.has(child) || ownership.get(child) === selected));
     });
   const animate = model.update.bind(model);
   model.selectStage = (id) => {

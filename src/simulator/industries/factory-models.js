@@ -202,10 +202,19 @@ export function buildBeveragesModel(args) {
     fillRod,
     output,
     alwaysVisible: [output.group, receiver.group],
+    stageVisibility: (group, id) =>
+      group === receiver.group
+        ? id === definition.steps[0].id
+        : group === output.group
+          ? ["pack", "seal", "ship"].includes(id)
+          : undefined,
     onSelectStage: (id) => {
       selectedStage = id;
       receiver.selectStage(id);
       output.selectStage(id);
+      receiver.group.visible = !args.stationView || id === definition.steps[0].id;
+      output.group.visible =
+        !args.stationView || ["pack", "seal", "ship"].includes(id);
     },
     update(s) {
       const active = s.phase === "operating",

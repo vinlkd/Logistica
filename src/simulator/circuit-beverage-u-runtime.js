@@ -117,7 +117,9 @@ export function createBeverageURuntime(world) {
       const fraction = (distance - before) / (route.distances[next] - before);
       const point = route.points[next - 1].clone().lerp(route.points[next], fraction);
       const direction = route.points[next].clone().sub(route.points[next - 1]).normalize();
-      const across = new Vector3(direction.z, 0, -direction.x).normalize();
+      const across = new Vector3(0, 1, 0).cross(direction);
+      if (across.lengthSq() < 1e-8) across.set(1, 0, 0);
+      across.normalize();
       const normal = direction.cross(across).normalize();
       return { point: point.addScaledVector(normal, 0.006), normal, distance };
     },

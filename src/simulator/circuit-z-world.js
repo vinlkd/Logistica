@@ -4,6 +4,7 @@ import { beverageZPreviewPlan } from "./circuit-beverage-z-preview.js";
 import { buildIndustrialHall } from "./circuit-industrial-hall.js";
 import { buildCircuitHmi } from "./circuit-hmi.js";
 import { buildDemoConveyor } from "./circuit-cookware-descent.js";
+import { buildCircuitRollerBridge } from "./circuit-roller-bridge.js";
 
 // This world only consumes a static snapshot. It owns no productive engine.
 export function buildCircuitZWorld(industry) {
@@ -411,6 +412,14 @@ export function buildCircuitZWorld(industry) {
     return station;
   });
   const demos = plan.connectors.map((connector, index) => {
+    const name = "Conector demonstrativo " + (index + 1);
+    if (connector.kind === "rollers")
+      return buildCircuitRollerBridge(THREE, scene, {
+        ...connector,
+        name,
+        steel: materials.steel,
+        frame: materials.steel,
+      });
     // Rounded corners stay inside each segment's convex hull.
     const waypoints = connector.points.map((p) => new THREE.Vector3(...p)),
       points = [waypoints[0].clone()];
@@ -446,13 +455,17 @@ export function buildCircuitZWorld(industry) {
     samples.push(points.at(-1));
     const demo = buildDemoConveyor(scene, {
       samples,
-      name: "Conector demonstrativo " + (index + 1),
+      name,
       crossings: [{ x: waypoints[0].x }, { x: waypoints.at(-1).x }],
       supportFloor: (x, z) => (onDeck(x, z) ? deck.y : 0),
       headClearance: playerHeight,
       sideGuides: true,
+      driveRollers: connector.from === "cap" && connector.to === "label",
       startDistance: connector.empty ? 0 : 0.35,
     });
+    demo.group.getObjectByProperty("type", "Mesh").name = "Correia demonstrativa contínua";
+    for (const mesh of demo.group.children)
+      if (mesh.geometry?.type === "TubeGeometry") mesh.name = "Guia lateral da correia";
     demo.load.name = "Carga demonstrativa · sem vínculo com estoque";
     demo.load.visible = false;
     return demo;
@@ -671,6 +684,9 @@ export function buildCircuitZWorld(industry) {
     },
     resetDescentDemo() {
       for (const demo of demos) demo.reset();
+    },
+    updateConveyors(dt, running) {
+      for (const demo of demos) demo.update(dt, running);
     },
     updateShadows(position) {
       if (
