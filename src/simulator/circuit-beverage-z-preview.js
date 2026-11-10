@@ -4,15 +4,21 @@ export function beverageZPreviewPlan() {
   const wallHeight = 4.8;
   const deckY = wallHeight + 0.16;
   const beltY = 1.22;
+  const west = -44;
+  const outboundZ = -5;
+  const turnX = 34;
+  const labelX = 25;
+  const packX = labelX - 11;
+  const sealX = packX - 23.5;
   const stages = [
     ["receive", -26, deckY, -29.5],
     ["wash", 4, deckY, -29.5],
     ["fill", 14, deckY, -29.5],
     ["cap", 24, deckY, -29.5],
-    ["label", 37, 0, 28],
-    ["pack", 26, 0, 28],
-    ["seal", 2.5, 0, 28],
-    ["ship", -19.5, 0, 28],
+    ["label", labelX, 0, outboundZ],
+    ["pack", packX, 0, outboundZ],
+    ["seal", sealX, 0, outboundZ],
+    ["ship", sealX - 22, 0, outboundZ],
   ].map(([stage, x, y, z], index) => ({
     stage,
     index: index + 1,
@@ -29,9 +35,9 @@ export function beverageZPreviewPlan() {
     productionConnected: false,
     height: 12.4,
     spawn: { x: -42, y: 0, z: -8.6 },
-    bounds: { west: -48, east: 48, north: -48, south: 48 },
+    bounds: { west, east: 36, north: -48, south: 32 },
     stages,
-    deck: { west: -48, east: 31, north: -36, south: -20, y: deckY },
+    deck: { west, east: 31, north: -36, south: -20, y: deckY },
     stairs: [
       { top: [-42, deckY, -20], bottom: [-42, 0, -9.8], width: 1.8, steps: 34 },
       { top: [27, deckY, -20], bottom: [27, 0, -9.8], width: 1.8, steps: 34 },
@@ -52,9 +58,9 @@ export function beverageZPreviewPlan() {
         demonstrationOnly: true,
         points: [
           [29, deckY + beltY, -29.5],
-          [44, deckY + beltY, -29.5],
-          [44, beltY, 28],
-          [42, beltY, 28],
+          [turnX, deckY + beltY, -29.5],
+          [turnX, beltY, outboundZ],
+          [labelX + 5, beltY, outboundZ],
         ],
       },
       {
@@ -62,12 +68,12 @@ export function beverageZPreviewPlan() {
         to: "pack",
         demonstrationOnly: true,
         empty: true,
-        points: [[31.925, beltY, 28], [31, beltY, 28]],
+        points: [[labelX - 5.075, beltY, outboundZ], [packX + 5, beltY, outboundZ]],
       },
     ],
     gates: [
       { side: "west", center: -29.5, width: 5, height: 5.6, sill: deckY, stage: "receive" },
-      { side: "west", center: 28, width: 5, height: 5.6, stage: "ship" },
+      { side: "west", center: outboundZ, width: 5, height: 5.6, stage: "ship" },
     ],
     player: { height: 3, eyeHeight: 2.85, radius: 0.4 },
     hmiStages: ["receive", "label"],
