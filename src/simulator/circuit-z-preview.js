@@ -7,7 +7,7 @@ import { BEVERAGES } from "./industries/definitions.js";
 import { buildBeveragesModel } from "./industries/factory-models.js";
 
 import { createPreviewMenu } from "./circuit-z-menu.js";
-import { createPreviewLook, createPreviewStick } from "./circuit-z-look.js";
+import { createPreviewLook } from "./circuit-z-look.js";
 import { stylePreviewDisplays } from "./circuit-z-displays.js";
 import "./circuit-z-menu.css";
 import "./circuit.css";
@@ -19,7 +19,6 @@ export async function launchCircuitZPreview(industry) {
   root.innerHTML = `<main class="circuit circuit-z"><canvas class="circuit-view" tabindex="0" aria-label="Prévia em U. WASD ou setas para andar, mouse para olhar, E para operar o monitor."></canvas><a class="circuit-home" href="${home.href}" aria-label="Escolher ambiente">‹</a><button class="z-plan" aria-label="Abrir menu">Menu <kbd>Esc</kbd></button><button class="circuit-operate" hidden><kbd>E</kbd><span>Operar monitor</span></button></main>`;
   const canvas = root.querySelector("canvas"),
     operate = root.querySelector(".circuit-operate");
-  const stick = createPreviewStick(canvas.parentElement);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -117,7 +116,6 @@ export async function launchCircuitZPreview(industry) {
   }
   function blur() {
     keys.clear();
-    stick.reset();
   }
   window.addEventListener("keydown", keydown);
   window.addEventListener("keyup", keyup);
@@ -130,7 +128,6 @@ export async function launchCircuitZPreview(industry) {
     onCommand() { refresh = true; },
     pause() {
       keys.clear();
-      stick.reset();
       look.release();
     },
     resume(capture) {
@@ -140,7 +137,6 @@ export async function launchCircuitZPreview(industry) {
   });
   const look = createPreviewLook(canvas, {
     available: () => !menu.isOpen,
-    onEscape: () => menu.open(),
     rotate(dx, dy) {
       yaw -= dx * 0.004;
       pitch = THREE.MathUtils.clamp(pitch - dy * 0.004, -1.15, 1.15);
@@ -161,10 +157,10 @@ export async function launchCircuitZPreview(industry) {
     if (!menu.isOpen) {
       const f =
           Number(keys.has("KeyW") || keys.has("ArrowUp")) -
-          Number(keys.has("KeyS") || keys.has("ArrowDown")) - stick.y,
+          Number(keys.has("KeyS") || keys.has("ArrowDown")),
         s =
           Number(keys.has("KeyD") || keys.has("ArrowRight")) -
-          Number(keys.has("KeyA") || keys.has("ArrowLeft")) + stick.x,
+          Number(keys.has("KeyA") || keys.has("ArrowLeft")),
         scale =
           ((keys.has("ShiftLeft") || keys.has("ShiftRight") ? 13 : 8) * dt) /
           Math.max(1, Math.hypot(f, s));
@@ -200,6 +196,7 @@ export async function launchCircuitZPreview(industry) {
       lab.updateOverview(state, dt);
       refresh = false;
     }
+    world.updateConveyors(dt, state.running);
     const view = menu.view(wallClock, state);
     const panelState = JSON.stringify(view);
     if (panelState !== lastPanelState) {

@@ -70,7 +70,7 @@ export function createPreviewMenu(
   <li><kbd>Q</kbd><span>Balões das estações</span></li>
   <li><kbd>Esc</kbd><span>Menu</span></li>
 </ul>
-<p class="z-help-note">Clique no cenário e mova o mouse para olhar.</p>`;
+<p class="z-help-note">Mova o mouse sobre o cenário para olhar; clique para interagir.</p>`;
         break;
       default:
         content = `<button class="z-menu-enter" data-action="resume">${entered ? "Retomar visita" : "Entrar no galpão"}</button><nav aria-label="Opções">${sections.map((name) => `<button data-section="${name}">${name}<span aria-hidden="true">›</span></button>`).join("")}</nav>`;
