@@ -12,14 +12,13 @@ export function buildRawLoader({ root, THREE, box, cyl, m, layout }) {
       box(
         group,
         x,
-        (0.09 + railY - 0.08) / 2,
+        (0.025 + railY - 0.17) / 2,
         z,
         0.14,
-        railY - 0.17,
+        railY - 0.195,
         0.14,
         m.blue,
       );
-      box(group, x, 0.045, z, 0.38, 0.09, 0.38, m.steel);
     }
   for (const z of [z0, z1]) box(group, 0, railY, z, 10.95, 0.16, 0.16, m.steel);
   const bridge = new THREE.Group();

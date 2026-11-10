@@ -85,6 +85,7 @@ for (const definition of [BEVERAGES, FURNITURE])
       if (definition.id === "beverages")
         sim.setSetting("volume", product.volume);
       else sim.setSetting("cutLength", product.length);
+      sim.setSpeed(4);
       sim.start();
       try {
         for (let i = 0; i < 3000 && sim.snapshot.done < 1; i++) {

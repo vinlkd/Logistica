@@ -1,6 +1,6 @@
 // Shared warehouse structure. y is the exact supporting top surface.
 export function buildWarehouseRack(args, slots) {
-  const { THREE, root, box, materials: m, solid } = args;
+  const { THREE, root, box, materials: m, solid, footplates = true } = args;
   const group = new THREE.Group();
   group.name = "Armazém • endereços de estoque";
   root.add(group);
@@ -102,7 +102,7 @@ export function buildWarehouseRack(args, slots) {
   }
   for (const { x, z, top } of posts.values()) {
     structure(x, top / 2, z, 0.1, top, 0.1);
-    structure(x, 0.04, z, 0.3, 0.08, 0.3, m.steel);
+    if (footplates) structure(x, 0.04, z, 0.3, 0.08, 0.3, m.steel);
   }
   // Connect adjacent bays at the rack faces without entering a fork channel.
   const rows=new Map();

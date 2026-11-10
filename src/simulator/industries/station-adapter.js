@@ -1,4 +1,5 @@
 import { stationPresentation } from "./station-presentation.js";
+import { CASE_CONVEYOR_SPEED } from "./bottle-crate-flow.js";
 
 function batchStraightRollers(THREE, base) {
   const { rollers } = base;
@@ -296,6 +297,12 @@ export function buildIndustryStation({
             ? position.travel - lastBeltPosition.travel : position.x - lastBeltPosition.x)
           : 0;
       lastBeltPosition = position;
+      const motorTravel =
+        state.running &&
+        (state.outputs?.motor || state.outputs?.transfer) &&
+        position.visible
+          ? Math.max(0, Number(dt) || 0) * (state.speed ?? 1) * CASE_CONVEYOR_SPEED
+          : 0;
       if (!presentation.visible)
         for (const part of [model.bottle, model.piece, model.parcel])
           if (part) part.visible = false;
@@ -316,7 +323,7 @@ export function buildIndustryStation({
         )
           ? 0.8
           : 0.04;
-      const travel = conveyorDelta > 0 ? conveyorDelta : beltDelta;
+      const travel = Math.max(conveyorDelta, beltDelta, motorTravel);
       if (travel > 0)
         for (const roller of base.rollers) roller.rotateY(-travel / 0.075);
         rollerBatch?.sync();

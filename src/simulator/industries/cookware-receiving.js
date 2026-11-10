@@ -52,10 +52,10 @@ export function buildCookwareReceiving(args) {
     for (const z of [-2, 2])
       box(group, x, 2.525, z, 0.12, 5.05, 0.12, m.accent ?? m.blue);
   for (const z of [-2, 2]) {
-    box(group, -3, 4.65, z, 7.52, 0.08, 0.08, m.steel);
-    box(group, -3, 5.05, z, 7.52, 0.08, 0.08, m.steel);
+    box(group, -3, 4.65, z, 7.26, 0.08, 0.08, m.steel);
+    box(group, -3, 5.05, z, 7.26, 0.08, 0.08, m.steel);
   }
-  const carriage = box(group, -1.7, 4.65, 0, 0.14, 0.08, 4.08, m.steel);
+  const carriage = box(group, -1.7, 4.75, 0, 0.14, 0.08, 4.08, m.steel);
   carriage.name = "Ponte do eletroímã • mesma doca das bebidas";
   const head = new THREE.Group();
   group.add(head);
@@ -63,10 +63,10 @@ export function buildCookwareReceiving(args) {
   const magnet = cyl(head, 0, 0.025, 0, 0.25, 0.05, m.dark);
   const rod = cyl(group, -1.7, 4, 0, 0.025, 1, m.steel);
   for (const x of [-5.12, -3.08])
-    box(group, x, 5.05, 0, 0.12, 0.08, 4.08, m.steel);
+    box(group, x, 5.15, 0, 0.12, 0.08, 4.08, m.steel);
   for (const z of [-1.02, 1.02])
     box(group, -4.1, 5.05, z, 2.16, 0.08, 0.12, m.steel);
-  const opener = buildCrateOpener({ ...args, root: group });
+  const opener = buildCrateOpener({ ...args, root: group }, { topCrossbar: false });
   let lastState,
     lastKey,
     previousPhase,

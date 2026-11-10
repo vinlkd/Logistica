@@ -114,7 +114,7 @@ export function buildCookwareWarehouse({
     cookwareWarehouseAddress(`UT-${index + 1}`, product),
   );
   const rack = buildWarehouseRack(
-    { THREE, root: group, box, materials: m, solid },
+    { THREE, root: group, box, materials: m, solid, footplates: false },
     slots.map((slot) => ({
       id: slot.label,
       x: slot.x,
@@ -145,7 +145,7 @@ export function buildCookwareWarehouse({
   const lift = new THREE.Group();
   carriage.add(lift);
   lift.name = "Garfos de apoio da caixa";
-  box(lift, 0, -0.1, 1.95, 1.42, 0.15, 0.3, m.blue);
+  box(lift, 0, -0.1, 1.95, 1.2, 0.15, 0.3, m.blue);
   const tines = [-0.15, 0.15].map((x) =>
     box(lift, x, -0.03, spec.centerZ, 0.13, 0.06, spec.depth + 0.12, m.steel),
   );
@@ -222,7 +222,7 @@ export function buildCookwareRawAddresses({
         post.name = `Montante fixo ${slot.id}`;
       }
     for (const side of [-1, 1])
-      box(group, slot.x, 1.6, slot.z + side * 0.82, 1.51, 0.07, 0.07, m.steel);
+      box(group, slot.x, 1.6, slot.z + side * 0.82, 1.34, 0.07, 0.07, m.steel);
     const z = slot.z + 1.05;
     const post = solid
       ? solid(slot.x, 0.55, z, 0.04, 1.1, 0.04, m.steel)

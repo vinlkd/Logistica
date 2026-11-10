@@ -596,7 +596,10 @@ for (const environment of ["cookware", "beverages", "parcels", "furniture"]) {
       environment === "cookware"
         ? createSimulation(12, { scope: "line" })
         : createIndustrySession(definitions[environment]);
-    if (environment !== "cookware") simulation.setScope("line");
+    if (environment !== "cookware") {
+      simulation.setScope("line");
+      if (environment === "beverages") simulation.setQuantity(12);
+    }
     simulation.setSpeed(4);
     simulation.start();
     let ticks = 0;

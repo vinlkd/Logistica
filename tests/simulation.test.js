@@ -7,6 +7,7 @@ function advance(simulation, seconds) {
 }
 test("um lote percorre os oito ambientes sem criar nem perder unidades", () => {
   const sim = createSimulation(3);
+  sim.setSpeed(4);
   sim.start();
   for (let i = 0; i < 2500; i++) {
     sim.step(0.05);

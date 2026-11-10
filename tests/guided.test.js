@@ -11,6 +11,7 @@ test("interactive operations require authorization at every recipe boundary", ()
       environment: e.id,
       mode: "guided",
     });
+    s.setSpeed(4);
     const cell = () => s.snapshot.cells.find((c) => c.id === e.id);
     s.start();
     advance(s);

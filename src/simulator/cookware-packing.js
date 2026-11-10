@@ -56,7 +56,7 @@ export function buildCookwarePacking({THREE,root,box,cyl,bar,m,product,layout,ro
  for(let x=10;x<=13.701;x+=.3){const roller=bar(group,[x,1.12,-2.1],[x,1.12,1.45],.075,m.steel);rollers.push(roller);}
  for(const x of [10.15,13.55])for(const z of [-2.15,1.5])box(group,x,.3675,z,.12,.735,.1,m.steel);
  for(const x of [3.9,10.65])for(const z of [front+.15,back-.15])box(group,x,cfg.gantryHeight/2,z,.14,cfg.gantryHeight,.14,m.blue);
- for(const z of [front+.15,back-.15])box(group,7.275,cfg.gantryHeight,z,6.89,.16,.16,m.steel);
+ for(const z of [front+.15,back-.15])box(group,7.275,cfg.gantryHeight+.09,z,6.89,.16,.16,m.steel);
  const carriage=new THREE.Group();group.add(carriage);box(carriage,0,4.65,(front+back)/2,.18,.14,front-back+.46,m.steel);
  const tool=new THREE.Group();group.add(tool);tool.name='Pinça externa apoia o aro da panela';
  box(tool,0,.28,0,2*(product.rim+.1),.08,.18,m.dark);

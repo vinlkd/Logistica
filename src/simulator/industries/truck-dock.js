@@ -156,9 +156,9 @@ export function buildTruckDock(
   hoist.name = "Ponte interna de descarga abaixo do teto";
   if (!shipping)
     for (const side of [-1, 1])
-      box(group, -6.2, 4.35, side * 1.51, 12.4, 0.08, 0.06, m.steel);
+      box(group, -6.2, 4.45, side * 1.51, 12.4, 0.08, 0.06, m.steel);
   const hoistBridge = box(hoist, 0, 4.35, 0, 0.14, 0.08, 3.08, m.steel);
-  const hoistLong = box(hoist, 0, 4.35, 0, 1.8, 0.08, 0.08, m.steel);
+  const hoistLong = box(hoist, 0, 4.45, 0, 1.8, 0.08, 0.08, m.steel);
   hoistLong.visible = cradle;
   const cables = [-1, 1].map((side) =>
     box(hoist, 0, 2, side * 0.45, 0.025, 1, 0.025, m.dark),
@@ -255,7 +255,7 @@ export function buildTruckDock(
           fork.scale.x = Math.abs(span) + Math.min(0.9, pose.width ?? 0.7);
         });
         hoistBridge.position.x = pose.x - x;
-        hoistLong.position.set(pose.x - x, 4.35, pose.z - z);
+        hoistLong.position.set(pose.x - x, 4.45, pose.z - z);
         if (cradle) {
           const extension = Math.max(0, Math.min(1, pose.extension ?? 0));
           for (const foot of cradleFeet) {

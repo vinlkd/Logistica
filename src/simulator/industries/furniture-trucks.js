@@ -1,12 +1,12 @@
 import {buildTruckDock,shippingDockPose,receivingDockPose} from './truck-dock.js';
 export function furnitureCargoSlot(index,target,x=6){
   const tier=Math.floor(index/10),at=index%10;
-  return at===0?{x:x+11.95,y:1.23+tier*1.103,z:0,rotation:Math.PI/2}:{x:x+10.35-Math.floor((at-1)/3)*1.8,y:1.23+tier*1.103,z:((at-1)%3-1)*1.05,rotation:0};
+  return at===0?{x:x+11.95,y:1.23+tier*1.103,z:0,rotation:Math.PI/2}:{x:x+10.35-Math.floor((at-1)/3)*1.8,y:1.23+tier*1.103,z:((at-1)%3-1),rotation:0};
 }
 export function furnitureInputSlot(index,x=-6){return {x:x-6.95-Math.floor(index%9/3)*2.05,y:1.2+Math.floor(index/9)*.145,z:(index%3-1)*.9};}
 export function createFurnitureTrucks(args){
   const {THREE,root,box,materials:m,definition}=args,first=definition.steps[0],last=definition.steps.at(-1);
-  const incoming=buildTruckDock(args,{shipping:false,stageId:first.id,x:first.x}),outgoing=buildTruckDock(args,{shipping:true,stageId:last.id,x:last.x});
+  const incoming=buildTruckDock(args,{shipping:false,stageId:first.id,x:first.x}),outgoing=buildTruckDock(args,{shipping:true,stageId:last.id,x:last.x,outwardDoors:true});
   const stock=new THREE.Group();stock.name='Painéis aguardando recebimento';root.add(stock);
   const boards=Array.from({length:30},(_,index)=>{const board=box(stock,0,.07,0,1.9,.14,.78,m.wood);board.userData.index=index;return board;});
   return {incoming,outgoing,stock,

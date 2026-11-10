@@ -1,6 +1,6 @@
 // Each arm holds a corner outside the panel's hinge-axis width. The rod can
 // therefore follow a flap through 270 degrees without crossing that panel.
-export function buildCrateOpener({THREE,root,box,cyl,materials:m},{x=-4.1}={}) {
+export function buildCrateOpener({THREE,root,box,cyl,materials:m},{x=-4.1,topCrossbar=true}={}) {
   const group=new THREE.Group();group.name='Abridor • abas dobradas para fora e para baixo';root.add(group);
   const arms=[];
   for(const side of [-1,1])for(const axis of ['x','z']) {
@@ -12,9 +12,10 @@ export function buildCrateOpener({THREE,root,box,cyl,materials:m},{x=-4.1}={}) {
     drive.name='Braço telescópico fora do painel';
     const motor=cyl(group,anchor.x,anchor.y,anchor.z,.06,.12,m.dark);
     const outside=side*2.25;
-    box(group,anchor.x,4.4,(anchor.z+outside)/2,.07,.07,Math.abs(outside-anchor.z),m.steel);
+    const braceEnd=outside-side*.045;
+    box(group,anchor.x,4.4,(anchor.z+braceEnd)/2,.07,.07,Math.abs(braceEnd-anchor.z),m.steel);
     box(group,anchor.x,4.705,outside,.07,.61,.07,m.steel);
-    box(group,anchor.x,5.05,(side*2+outside)/2,.08,.08,.25,m.steel);
+    if(topCrossbar)box(group,anchor.x,5.05,(side*2+outside)/2,.08,.08,.25,m.steel);
     arms.push({minor,side,axis,anchor,shoe,drive,motor});
   }
   return {group,arms,

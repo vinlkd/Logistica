@@ -1,7 +1,7 @@
 import { CONVEYOR_TOP, CLEARANCE } from "./kinematics.js";
 import { materialCrateSlot } from "./material-crates.js";
 export const COOKWARE_SOURCE_CAPACITY = 12;
-export const COOKWARE_RECEIVING_SPEED = 2.088;
+export const COOKWARE_RECEIVING_SPEED = 1.6;
 const VERTICAL = 1.5,
   TOP = CONVEYOR_TOP + CLEARANCE;
 const clamp = (v) => Math.max(0, Math.min(1, Number(v) || 0));
