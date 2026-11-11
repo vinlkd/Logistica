@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
 
@@ -30,10 +31,10 @@ function outputs(result) {
   );
 }
 
-test("Pages default targets Prototipo-Logistica subdirectory and separate output", async () => {
+test("Pages default targets Logistica subdirectory and separate output", async () => {
   await withRepository(undefined, async () => {
     const pages = await configuration("pages");
-    assert.equal(pages.base, "/Prototipo-Logistica/");
+    assert.equal(pages.base, "/Logistica/");
     assert.equal(pages.build.outDir, "dist-pages");
     const normal = await configuration("production");
     assert.equal(normal.base, "./");
@@ -48,8 +49,16 @@ test("Pages derives its path from GitHub repository metadata instead of an old r
   });
 });
 
+test("Pages build uses the current repository name instead of stale Pages metadata", async () => {
+  const workflow = await readFile(
+    new URL("../.github/workflows/pages.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(workflow, /--base="\/\$\{GITHUB_REPOSITORY#\*\/\}\/"/);
+});
+
 test("compiled Pages demo uses hashed subdirectory assets and excludes backend authentication", async () => {
-  await withRepository("vinlkd/Prototipo-Logistica", async () => {
+  await withRepository("vinlkd/Logistica", async () => {
     const result = await build({
       root,
       mode: "pages",
@@ -64,7 +73,7 @@ test("compiled Pages demo uses hashed subdirectory assets and excludes backend a
         .filter((file) => file.type === "chunk")
         .map((file) => file.code)
         .join("\n");
-    assert.match(html, /\/Prototipo-Logistica\/assets\/[^" ]+\.js/);
+    assert.match(html, /\/Logistica\/assets\/[^" ]+\.js/);
     assert.equal(
       html.includes("/src/main.js"),
       false,

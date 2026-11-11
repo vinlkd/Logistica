@@ -12,9 +12,9 @@ Para executar separadamente: `npm run dev:api` e `npm run dev:client`. Se a port
 
 A demonstração estática abre diretamente no simulador, sem cadastro, login, recuperação de senha ou chamadas à API. Ela não grava contas de alunos nem representa autenticação. O modo normal (`npm run dev` / `npm run build`) continua usando o servidor com JWT.
 
-`npm run build:pages` gera os arquivos públicos em `dist-pages`, com os caminhos preparados para `/Prototipo-Logistica/`. Para conferir localmente, execute `npm run preview:pages` e abra `http://127.0.0.1:4173/Prototipo-Logistica/`.
+`npm run build:pages` gera os arquivos públicos em `dist-pages`, com os caminhos preparados para `/Logistica/`. Para conferir localmente, execute `npm run preview:pages` e abra `http://127.0.0.1:4173/Logistica/`.
 
-Em **Settings → Pages → Build and deployment → Source**, selecione **GitHub Actions**. O fluxo `.github/workflows/pages.yml` testa, compila e publica a demonstração a cada envio para `main`, ou manualmente pela aba Actions. Endereço: `https://vinlkd.github.io/Prototipo-Logistica/`.
+Em **Settings → Pages → Build and deployment → Source**, selecione **GitHub Actions**. O fluxo `.github/workflows/pages.yml` testa, compila e publica a demonstração a cada envio para `main`, ou manualmente pela aba Actions. Endereço: `https://vinlkd.github.io/Logistica/`.
 
 Somente `dist-pages` é publicado. Banco SQLite, arquivos privados, código do servidor e configurações de e-mail ficam fora do site. Ao renomear o repositório, o fluxo usa o caminho informado pelo GitHub Pages automaticamente.
 

@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 
 const repository =
-  process.env.GITHUB_REPOSITORY?.split("/")[1] ?? "Prototipo-Logistica";
+  process.env.GITHUB_REPOSITORY?.split("/")[1] ?? "Logistica";
 
 export default defineConfig(({ mode }) => ({
   base: mode === "pages" ? `/${repository}/` : "./",
